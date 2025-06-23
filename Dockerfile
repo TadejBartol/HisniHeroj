@@ -7,18 +7,16 @@ RUN apk add --no-cache \
     npm \
     python3 \
     make \
-    g++ \
-    curl \
-    vips-dev
+    g++
 
 # Set working directory
 WORKDIR /app
 
-# Copy package.json
-COPY package.json ./
+# Copy package.json first for better caching
+COPY package*.json ./
 
 # Install Node.js dependencies
-RUN npm install --omit=dev
+RUN npm ci --only=production
 
 # Copy source code
 COPY src/ ./src/
@@ -38,4 +36,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
   CMD curl -f http://localhost:3000/api/v1/health || exit 1
 
 # Start the application
-CMD ["./run.sh"]
+CMD ["./run.sh"] 

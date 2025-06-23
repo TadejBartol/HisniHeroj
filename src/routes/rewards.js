@@ -4,13 +4,10 @@
 
 const express = require('express');
 const { query, queryOne, beginTransaction, commitTransaction, rollbackTransaction } = require('../models/database');
-const { authenticate, requireHouseholdAccess, checkPermission } = require('../middleware/auth');
+const { requireHouseholdAccess, requirePermission } = require('../middleware/auth');
 const { validate, rewardSchemas } = require('../middleware/validation');
 
 const router = express.Router();
-
-// Apply authentication to all reward routes
-router.use(authenticate);
 
 // =============================================================================
 // GET /rewards - Get Rewards (with filtering)
@@ -247,7 +244,7 @@ router.get('/:id', async (req, res) => {
 // POST /rewards - Create New Reward
 // =============================================================================
 
-router.post('/', requireHouseholdAccess, checkPermission('create_rewards'), 
+router.post('/', requireHouseholdAccess, requirePermission('can_create_rewards'), 
   validate(rewardSchemas.create), async (req, res) => {
   try {
     const {
@@ -309,7 +306,7 @@ router.post('/', requireHouseholdAccess, checkPermission('create_rewards'),
 // PUT /rewards/:id - Update Reward
 // =============================================================================
 
-router.put('/:id', requireHouseholdAccess, checkPermission('create_rewards'), 
+router.put('/:id', requireHouseholdAccess, requirePermission('can_create_rewards'), 
   validate(rewardSchemas.update), async (req, res) => {
   try {
     const rewardId = req.params.id;
@@ -395,7 +392,7 @@ router.put('/:id', requireHouseholdAccess, checkPermission('create_rewards'),
 // DELETE /rewards/:id - Delete Reward
 // =============================================================================
 
-router.delete('/:id', requireHouseholdAccess, checkPermission('create_rewards'), 
+router.delete('/:id', requireHouseholdAccess, requirePermission('can_create_rewards'), 
   async (req, res) => {
   try {
     const rewardId = req.params.id;
@@ -709,7 +706,7 @@ router.get('/claims/my', async (req, res) => {
 // POST /rewards/claims/:id/fulfill - Fulfill Reward Claim
 // =============================================================================
 
-router.post('/claims/:id/fulfill', requireHouseholdAccess, checkPermission('fulfill_rewards'), 
+router.post('/claims/:id/fulfill', requireHouseholdAccess, requirePermission('can_create_rewards'), 
   async (req, res) => {
   try {
     const claimId = req.params.id;

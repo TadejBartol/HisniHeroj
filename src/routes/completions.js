@@ -4,14 +4,10 @@
 
 const express = require('express');
 const { query, queryOne, beginTransaction, commitTransaction, rollbackTransaction } = require('../models/database');
-const { authenticate } = require('../middleware/auth');
 const { validate, completionSchemas } = require('../middleware/validation');
 const { uploadSingle } = require('../utils/upload');
 
 const router = express.Router();
-
-// Apply authentication to all completion routes
-router.use(authenticate);
 
 // =============================================================================
 // GET /completions - Get User's Completions

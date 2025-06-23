@@ -4,13 +4,10 @@
 
 const express = require('express');
 const { query, queryOne } = require('../models/database');
-const { authenticate, requireHouseholdAccess, checkPermission } = require('../middleware/auth');
+const { requireHouseholdAccess, requirePermission } = require('../middleware/auth');
 const { validate, taskSchemas } = require('../middleware/validation');
 
 const router = express.Router();
-
-// Apply authentication to all task routes
-router.use(authenticate);
 
 // =============================================================================
 // GET /tasks/categories - Get Task Categories
@@ -294,7 +291,7 @@ router.get('/:id', async (req, res) => {
 // POST /tasks - Create New Task
 // =============================================================================
 
-router.post('/', requireHouseholdAccess, checkPermission('create_tasks'), 
+router.post('/', requireHouseholdAccess, requirePermission('can_create_tasks'), 
   validate(taskSchemas.create), async (req, res) => {
   try {
     const {
@@ -388,7 +385,7 @@ router.post('/', requireHouseholdAccess, checkPermission('create_tasks'),
 // PUT /tasks/:id - Update Task
 // =============================================================================
 
-router.put('/:id', requireHouseholdAccess, checkPermission('create_tasks'), 
+router.put('/:id', requireHouseholdAccess, requirePermission('can_create_tasks'), 
   validate(taskSchemas.update), async (req, res) => {
   try {
     const taskId = req.params.id;
@@ -509,7 +506,7 @@ router.put('/:id', requireHouseholdAccess, checkPermission('create_tasks'),
 // DELETE /tasks/:id - Delete Task
 // =============================================================================
 
-router.delete('/:id', requireHouseholdAccess, checkPermission('create_tasks'), 
+router.delete('/:id', requireHouseholdAccess, requirePermission('can_create_tasks'), 
   async (req, res) => {
   try {
     const taskId = req.params.id;

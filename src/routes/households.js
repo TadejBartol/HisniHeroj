@@ -5,13 +5,10 @@
 const express = require('express');
 const crypto = require('crypto');
 const { query, queryOne, beginTransaction, commitTransaction, rollbackTransaction } = require('../models/database');
-const { authenticate, requireHouseholdAccess, checkPermission } = require('../middleware/auth');
+const { requireHouseholdAccess, requirePermission } = require('../middleware/auth');
 const { validate, householdSchemas } = require('../middleware/validation');
 
 const router = express.Router();
-
-// Apply authentication to all household routes
-router.use(authenticate);
 
 // =============================================================================
 // POST /households - Create New Household
@@ -302,7 +299,7 @@ router.get('/:id', requireHouseholdAccess, async (req, res) => {
 // PUT /households/:id - Update Household
 // =============================================================================
 
-router.put('/:id', requireHouseholdAccess, checkPermission('manage_household'), 
+router.put('/:id', requireHouseholdAccess, requirePermission('manage_household'), 
   validate(householdSchemas.update), async (req, res) => {
   try {
     const householdId = req.params.id;
@@ -355,7 +352,7 @@ router.put('/:id', requireHouseholdAccess, checkPermission('manage_household'),
 // POST /households/:id/regenerate-invite - Regenerate Invite Code
 // =============================================================================
 
-router.post('/:id/regenerate-invite', requireHouseholdAccess, checkPermission('manage_household'), 
+router.post('/:id/regenerate-invite', requireHouseholdAccess, requirePermission('manage_household'), 
   async (req, res) => {
   try {
     const householdId = req.params.id;
@@ -410,7 +407,7 @@ router.post('/:id/regenerate-invite', requireHouseholdAccess, checkPermission('m
 // PUT /households/:id/members/:userId/role - Update Member Role
 // =============================================================================
 
-router.put('/:id/members/:userId/role', requireHouseholdAccess, checkPermission('manage_members'), 
+router.put('/:id/members/:userId/role', requireHouseholdAccess, requirePermission('manage_members'), 
   validate(householdSchemas.updateMemberRole), async (req, res) => {
   try {
     const householdId = req.params.id;
@@ -482,7 +479,7 @@ router.put('/:id/members/:userId/role', requireHouseholdAccess, checkPermission(
 // DELETE /households/:id/members/:userId - Remove Member
 // =============================================================================
 
-router.delete('/:id/members/:userId', requireHouseholdAccess, checkPermission('manage_members'), 
+router.delete('/:id/members/:userId', requireHouseholdAccess, requirePermission('manage_members'), 
   async (req, res) => {
   try {
     const householdId = req.params.id;
@@ -604,7 +601,7 @@ router.post('/:id/leave', requireHouseholdAccess, async (req, res) => {
 // DELETE /households/:id - Delete Household
 // =============================================================================
 
-router.delete('/:id', requireHouseholdAccess, checkPermission('manage_household'), 
+router.delete('/:id', requireHouseholdAccess, requirePermission('manage_household'), 
   async (req, res) => {
   try {
     const householdId = req.params.id;

@@ -4,13 +4,10 @@
 
 const express = require('express');
 const { query, queryOne, beginTransaction, commitTransaction, rollbackTransaction } = require('../models/database');
-const { authenticate, requireHouseholdAccess, checkPermission } = require('../middleware/auth');
+const { requireHouseholdAccess, requirePermission } = require('../middleware/auth');
 const { validate, assignmentSchemas } = require('../middleware/validation');
 
 const router = express.Router();
-
-// Apply authentication to all assignment routes
-router.use(authenticate);
 
 // =============================================================================
 // GET /assignments - Get User's Assignments
@@ -276,7 +273,7 @@ router.get('/:id', async (req, res) => {
 // POST /assignments - Create Task Assignment
 // =============================================================================
 
-router.post('/', requireHouseholdAccess, checkPermission('assign_tasks'), 
+router.post('/', requireHouseholdAccess, requirePermission('can_assign_tasks'), 
   validate(assignmentSchemas.create), async (req, res) => {
   try {
     const {
@@ -398,7 +395,7 @@ router.post('/', requireHouseholdAccess, checkPermission('assign_tasks'),
 // POST /assignments/bulk - Bulk Create Assignments
 // =============================================================================
 
-router.post('/bulk', requireHouseholdAccess, checkPermission('assign_tasks'), 
+router.post('/bulk', requireHouseholdAccess, requirePermission('can_assign_tasks'), 
   validate(assignmentSchemas.bulkCreate), async (req, res) => {
   let connection;
   

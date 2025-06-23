@@ -4,12 +4,7 @@
 
 const express = require('express');
 const { query, queryOne } = require('../models/database');
-const { authenticate } = require('../middleware/auth');
-
 const router = express.Router();
-
-// Apply authentication to all dashboard routes
-router.use(authenticate);
 
 // =============================================================================
 // GET /dashboard/personal - Personal Dashboard Data

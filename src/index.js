@@ -29,6 +29,24 @@ const { errorHandler, notFoundHandler } = require('./middleware/validation');
 const { testConnection, runScheduledTasks } = require('./models/database');
 
 // =============================================================================
+// DEBUG: Check all imports
+// =============================================================================
+console.log('=== DEBUG: Checking imports ===');
+console.log('authRoutes:', typeof authRoutes, authRoutes ? '✅' : '❌');
+console.log('userRoutes:', typeof userRoutes, userRoutes ? '✅' : '❌');
+console.log('householdRoutes:', typeof householdRoutes, householdRoutes ? '✅' : '❌');
+console.log('taskRoutes:', typeof taskRoutes, taskRoutes ? '✅' : '❌');
+console.log('assignmentRoutes:', typeof assignmentRoutes, assignmentRoutes ? '✅' : '❌');
+console.log('completionRoutes:', typeof completionRoutes, completionRoutes ? '✅' : '❌');
+console.log('rewardRoutes:', typeof rewardRoutes, rewardRoutes ? '✅' : '❌');
+console.log('dashboardRoutes:', typeof dashboardRoutes, dashboardRoutes ? '✅' : '❌');
+console.log('imageRoutes:', typeof imageRoutes, imageRoutes ? '✅' : '❌');
+console.log('authenticate:', typeof authenticate, authenticate ? '✅' : '❌');
+console.log('errorHandler:', typeof errorHandler, errorHandler ? '✅' : '❌');
+console.log('notFoundHandler:', typeof notFoundHandler, notFoundHandler ? '✅' : '❌');
+console.log('=== END DEBUG ===');
+
+// =============================================================================
 // CONFIGURATION
 // =============================================================================
 

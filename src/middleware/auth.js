@@ -68,7 +68,10 @@ async function authMiddleware(req, res, next) {
     }
 
     // Add user to request object
-    req.user = user;
+    req.user = {
+      ...user,
+      userId: user.user_id  // Add userId alias for backward compatibility
+    };
     req.userId = user.user_id;
     
     console.log('🔐 AUTH MIDDLEWARE SUCCESS - calling next()');

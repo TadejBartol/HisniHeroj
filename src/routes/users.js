@@ -374,7 +374,7 @@ router.delete('/account', (req, res, next) => {
   console.log('📋 Headers:', req.headers);
   console.log('📦 Body:', req.body);
   next();
-}, authenticate, validate(userSchemas.deleteAccount), async (req, res) => {
+}, validate(userSchemas.deleteAccount), async (req, res) => {
   try {
     console.log('🗑️ DELETE /account request received AFTER middleware');
     console.log('🔍 Request body:', req.body);

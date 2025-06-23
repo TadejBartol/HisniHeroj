@@ -22,7 +22,13 @@ const dashboardRoutes = require('./routes/dashboard');
 const imageRoutes = require('./routes/images');
 
 // Import middleware
-const { authenticate } = require('./middleware/auth');
+console.log('DEBUG: About to import auth middleware...');
+const authModule = require('./middleware/auth');
+console.log('DEBUG: Auth module imported:', Object.keys(authModule));
+console.log('DEBUG: Auth module authenticate type:', typeof authModule.authenticate);
+const { authenticate } = authModule;
+console.log('DEBUG: Destructured authenticate type:', typeof authenticate);
+
 const { errorHandler, notFoundHandler } = require('./middleware/validation');
 
 // Import database

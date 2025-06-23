@@ -369,9 +369,14 @@ router.get('/stats', async (req, res) => {
 // DELETE /users/account - Deactivate Account
 // =============================================================================
 
-router.delete('/account', authenticate, validate(userSchemas.deleteAccount), async (req, res) => {
+router.delete('/account', (req, res, next) => {
+  console.log('🔥 DELETE /account - RAW REQUEST');
+  console.log('📋 Headers:', req.headers);
+  console.log('📦 Body:', req.body);
+  next();
+}, authenticate, validate(userSchemas.deleteAccount), async (req, res) => {
   try {
-    console.log('🗑️ DELETE /account request received');
+    console.log('🗑️ DELETE /account request received AFTER middleware');
     console.log('🔍 Request body:', req.body);
     console.log('👤 Authenticated user:', req.user);
     

@@ -122,7 +122,12 @@ app.get('/api/v1/health', (req, res) => {
 
 // API routes
 app.use('/api/v1/auth', authRoutes);
-app.use('/api/v1/users', authenticate, userRoutes);
+app.use('/api/v1/users', (req, res, next) => {
+  console.log('🔥 USERS ROUTE HIT:', req.method, req.path);
+  console.log('🔥 Full URL:', req.originalUrl);
+  console.log('🔥 Body:', req.body);
+  next();
+}, authenticate, userRoutes);
 app.use('/api/v1/households', authenticate, householdRoutes);
 app.use('/api/v1/tasks', authenticate, taskRoutes);
 app.use('/api/v1/assignments', authenticate, assignmentRoutes);

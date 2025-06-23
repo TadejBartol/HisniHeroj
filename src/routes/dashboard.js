@@ -76,9 +76,9 @@ router.get('/personal', async (req, res) => {
         COALESCE(SUM(CASE WHEN tc.completed_at >= DATE_FORMAT(CURDATE(), '%Y-%m-01') 
                          THEN tc.points_earned ELSE 0 END), 0) as month_points
       FROM users u
-      LEFT JOIN task_assignments ta ON u.user_id = ta.assigned_to_user_id
+      LEFT JOIN task_assignments ta ON u.user_id = ta.assigned_to
       LEFT JOIN tasks task_for_assignment ON ta.task_id = task_for_assignment.task_id AND task_for_assignment.household_id = ?
-      LEFT JOIN task_completions tc ON u.user_id = tc.completed_by_user_id
+      LEFT JOIN task_completions tc ON u.user_id = tc.completed_by
       LEFT JOIN tasks task_for_completion ON tc.task_id = task_for_completion.task_id AND task_for_completion.household_id = ?
       WHERE u.user_id = ?
     `, [targetHouseholdId, targetHouseholdId, req.user.userId]);
@@ -92,7 +92,7 @@ router.get('/personal', async (req, res) => {
         ta.status,
         t.title,
         t.difficulty_minutes,
-        t.requires_photo,
+        t.requires_proof,
         cat.name as category_name,
         cat.icon as category_icon,
         cat.color as category_color,
@@ -100,7 +100,7 @@ router.get('/personal', async (req, res) => {
       FROM task_assignments ta
       JOIN tasks t ON ta.task_id = t.task_id
       JOIN task_categories cat ON t.category_id = cat.category_id
-      WHERE ta.assigned_to_user_id = ? 
+      WHERE ta.assigned_to = ? 
         AND t.household_id = ?
         AND ta.is_active = 1 
         AND ta.status IN ('pending', 'overdue')
@@ -126,7 +126,7 @@ router.get('/personal', async (req, res) => {
       FROM task_completions tc
       JOIN tasks t ON tc.task_id = t.task_id
       JOIN task_categories cat ON t.category_id = cat.category_id
-      WHERE tc.completed_by_user_id = ? 
+      WHERE tc.completed_by = ? 
         AND t.household_id = ?
       ORDER BY tc.completed_at DESC
       LIMIT 10
@@ -141,12 +141,12 @@ router.get('/personal', async (req, res) => {
         -- This month
         COALESCE(SUM(CASE WHEN tc.completed_at >= DATE_FORMAT(CURDATE(), '%Y-%m-01') 
                          THEN tc.points_earned ELSE 0 END), 0) as month_earned,
-        COALESCE(SUM(CASE WHEN rc.claimed_at >= DATE_FORMAT(CURDATE(), '%Y-%m-01') AND rc.is_fulfilled = 1
+        COALESCE(SUM(CASE WHEN rc.claimed_at >= DATE_FORMAT(CURDATE(), '%Y-%m-01') AND rc.status = 'fulfilled'
                          THEN rc.points_spent ELSE 0 END), 0) as month_spent
       FROM task_completions tc
       JOIN tasks t ON tc.task_id = t.task_id
-      LEFT JOIN reward_claims rc ON rc.claimed_by_user_id = tc.completed_by_user_id AND rc.is_fulfilled = 1
-      WHERE tc.completed_by_user_id = ? AND t.household_id = ?
+      LEFT JOIN reward_claims rc ON rc.claimed_by = tc.completed_by AND rc.status = 'fulfilled'
+      WHERE tc.completed_by = ? AND t.household_id = ?
     `, [req.user.userId, targetHouseholdId]);
 
     // 5. Upcoming Assignments (next 7 days)
@@ -161,7 +161,7 @@ router.get('/personal', async (req, res) => {
       FROM task_assignments ta
       JOIN tasks t ON ta.task_id = t.task_id
       JOIN task_categories cat ON t.category_id = cat.category_id
-      WHERE ta.assigned_to_user_id = ? 
+      WHERE ta.assigned_to = ? 
         AND t.household_id = ?
         AND ta.is_active = 1 
         AND ta.status = 'pending'
@@ -242,7 +242,7 @@ router.get('/household/:id', async (req, res) => {
         
         -- Rewards
         COUNT(DISTINCT r.reward_id) as total_rewards,
-        COUNT(DISTINCT CASE WHEN rc.is_fulfilled = 0 THEN rc.claim_id END) as pending_reward_claims
+        COUNT(DISTINCT CASE WHEN rc.status = 'pending' THEN rc.claim_id END) as pending_reward_claims
       FROM households h
       LEFT JOIN household_members hm ON h.household_id = hm.household_id AND hm.is_active = 1
       LEFT JOIN users u ON hm.user_id = u.user_id AND u.is_active = 1
@@ -273,13 +273,13 @@ router.get('/household/:id', async (req, res) => {
         COALESCE(SUM(tc.points_earned), 0) - COALESCE(SUM(rc.points_spent), 0) as points_balance
       FROM household_members hm
       JOIN users u ON hm.user_id = u.user_id
-      LEFT JOIN task_completions tc ON u.user_id = tc.completed_by_user_id AND tc.task_id IN (
+      LEFT JOIN task_completions tc ON u.user_id = tc.completed_by AND tc.task_id IN (
         SELECT task_id FROM tasks WHERE household_id = ?
       )
-      LEFT JOIN task_assignments ta ON u.user_id = ta.assigned_to_user_id AND ta.task_id IN (
+      LEFT JOIN task_assignments ta ON u.user_id = ta.assigned_to AND ta.task_id IN (
         SELECT task_id FROM tasks WHERE household_id = ?
       )
-      LEFT JOIN reward_claims rc ON u.user_id = rc.claimed_by_user_id AND rc.is_fulfilled = 1 AND rc.reward_id IN (
+      LEFT JOIN reward_claims rc ON u.user_id = rc.claimed_by AND rc.status = 'fulfilled' AND rc.reward_id IN (
         SELECT reward_id FROM rewards WHERE household_id = ?
       )
       WHERE hm.household_id = ? AND hm.is_active = 1 AND u.is_active = 1
@@ -294,93 +294,77 @@ router.get('/household/:id', async (req, res) => {
         cat.name,
         cat.icon,
         cat.color,
-        COUNT(DISTINCT t.task_id) as total_tasks,
-        COUNT(DISTINCT tc.completion_id) as total_completions,
+        COUNT(DISTINCT t.task_id) as task_count,
+        COUNT(DISTINCT tc.completion_id) as completion_count,
         COALESCE(SUM(tc.points_earned), 0) as total_points,
-        COUNT(DISTINCT CASE WHEN tc.completed_at >= DATE_SUB(CURDATE(), INTERVAL 30 DAY) THEN tc.completion_id END) as recent_completions,
-        COALESCE(AVG(tc.points_earned), 0) as avg_points_per_completion
+        COALESCE(AVG(tc.points_earned), 0) as avg_points_per_completion,
+        COUNT(DISTINCT tc.completed_by) as active_users
       FROM task_categories cat
       LEFT JOIN tasks t ON cat.category_id = t.category_id AND t.household_id = ? AND t.is_active = 1
       LEFT JOIN task_completions tc ON t.task_id = tc.task_id
       WHERE cat.is_active = 1
       GROUP BY cat.category_id, cat.name, cat.icon, cat.color
-      HAVING total_tasks > 0 OR total_completions > 0
-      ORDER BY recent_completions DESC, total_points DESC
+      HAVING task_count > 0
+      ORDER BY completion_count DESC, total_points DESC
     `, [householdId]);
 
     // 4. Recent Activity Feed
     const recentActivity = await query(`
       SELECT 
         'completion' as activity_type,
-        tc.completed_at as activity_time,
         tc.completion_id as activity_id,
-        u.first_name,
-        u.last_name,
-        u.profile_image,
+        tc.completed_at as activity_date,
+        tc.points_earned,
+        tc.comment,
         t.title as task_title,
         cat.name as category_name,
         cat.icon as category_icon,
-        tc.points_earned,
-        tc.comment
+        u.first_name,
+        u.last_name,
+        u.profile_image,
+        NULL as reward_title
       FROM task_completions tc
+      JOIN users u ON tc.completed_by = u.user_id
       JOIN tasks t ON tc.task_id = t.task_id
       JOIN task_categories cat ON t.category_id = cat.category_id
-      JOIN users u ON tc.completed_by_user_id = u.user_id
       WHERE t.household_id = ?
       
       UNION ALL
       
       SELECT 
         'reward_claim' as activity_type,
-        rc.claimed_at as activity_time,
         rc.claim_id as activity_id,
+        rc.claimed_at as activity_date,
+        -rc.points_spent as points_earned,
+        rc.admin_notes as comment,
+        NULL as task_title,
+        NULL as category_name,
+        NULL as category_icon,
         u.first_name,
         u.last_name,
         u.profile_image,
-        r.title as task_title,
-        'reward' as category_name,
-        'gift' as category_icon,
-        -rc.points_spent as points_earned,
-        NULL as comment
+        r.title as reward_title
       FROM reward_claims rc
+      JOIN users u ON rc.claimed_by = u.user_id
       JOIN rewards r ON rc.reward_id = r.reward_id
-      JOIN users u ON rc.claimed_by_user_id = u.user_id
       WHERE r.household_id = ?
       
-      ORDER BY activity_time DESC
+      ORDER BY activity_date DESC
       LIMIT 20
     `, [householdId, householdId]);
-
-    // 5. Weekly Completion Trend (last 4 weeks)
-    const weeklyTrend = await query(`
-      SELECT 
-        YEAR(tc.completed_at) as year,
-        WEEK(tc.completed_at) as week,
-        CONCAT(YEAR(tc.completed_at), '-W', LPAD(WEEK(tc.completed_at), 2, '0')) as week_label,
-        COUNT(tc.completion_id) as completions,
-        SUM(tc.points_earned) as points_earned,
-        COUNT(DISTINCT tc.completed_by_user_id) as active_users
-      FROM task_completions tc
-      JOIN tasks t ON tc.task_id = t.task_id
-      WHERE t.household_id = ? 
-        AND tc.completed_at >= DATE_SUB(CURDATE(), INTERVAL 4 WEEK)
-      GROUP BY YEAR(tc.completed_at), WEEK(tc.completed_at)
-      ORDER BY year, week
-    `, [householdId]);
 
     res.json({
       success: true,
       data: {
         household: {
-          id: householdId,
+          household_id: householdId,
           name: hasAccess.household_name,
           user_role: hasAccess.role
         },
         summary: householdSummary,
-        member_activity: memberActivity,
-        category_performance: categoryPerformance,
-        recent_activity: recentActivity,
-        weekly_trend: weeklyTrend
+        members: memberActivity,
+        categories: categoryPerformance,
+        recent_activity: recentActivity
       }
     });
 
@@ -477,7 +461,7 @@ router.get('/leaderboard/:id', async (req, res) => {
         COUNT(DISTINCT CASE WHEN tc.completed_at >= DATE_SUB(NOW(), INTERVAL 7 DAY) THEN tc.completion_id END) as week_completions
       FROM household_members hm
       JOIN users u ON hm.user_id = u.user_id
-      LEFT JOIN task_completions tc ON u.user_id = tc.completed_by_user_id ${dateFilter}
+      LEFT JOIN task_completions tc ON u.user_id = tc.completed_by ${dateFilter}
       LEFT JOIN tasks t ON tc.task_id = t.task_id AND t.household_id = ?
       LEFT JOIN task_categories cat ON t.category_id = cat.category_id
       WHERE hm.household_id = ? AND hm.is_active = 1 AND u.is_active = 1
@@ -522,15 +506,15 @@ router.get('/leaderboard/:id', async (req, res) => {
 });
 
 // =============================================================================
-// GET /dashboard/analytics/:id - Household Analytics
+// GET /dashboard/analytics/:household_id - Advanced Analytics
 // =============================================================================
 
-router.get('/analytics/:id', async (req, res) => {
+router.get('/analytics/:household_id', async (req, res) => {
   try {
-    const householdId = req.params.id;
-    const { period = '30' } = req.query; // days
+    const householdId = req.params.household_id;
+    const { period = 'month', start_date, end_date } = req.query;
 
-    // Verify access
+    // Verify access to household
     const hasAccess = await queryOne(`
       SELECT membership_id FROM household_members 
       WHERE household_id = ? AND user_id = ? AND is_active = 1
@@ -546,110 +530,130 @@ router.get('/analytics/:id', async (req, res) => {
       });
     }
 
-    // 1. Daily completion timeline
-    const dailyTimeline = await query(`
+    // Build date filter based on period or custom dates
+    let dateFilter = '';
+    let dateParams = [];
+
+    if (start_date && end_date) {
+      dateFilter = 'AND tc.completed_at BETWEEN ? AND ?';
+      dateParams = [start_date, end_date];
+    } else {
+      switch (period) {
+        case 'week':
+          dateFilter = 'AND tc.completed_at >= DATE_SUB(CURDATE(), INTERVAL 1 WEEK)';
+          break;
+        case 'month':
+          dateFilter = 'AND tc.completed_at >= DATE_SUB(CURDATE(), INTERVAL 1 MONTH)';
+          break;
+        case 'quarter':
+          dateFilter = 'AND tc.completed_at >= DATE_SUB(CURDATE(), INTERVAL 3 MONTH)';
+          break;
+        case 'year':
+          dateFilter = 'AND tc.completed_at >= DATE_SUB(CURDATE(), INTERVAL 1 YEAR)';
+          break;
+        default:
+          dateFilter = 'AND tc.completed_at >= DATE_SUB(CURDATE(), INTERVAL 1 MONTH)';
+      }
+    }
+
+    // 1. Completion Trends (daily aggregation)
+    const completionTrends = await query(`
       SELECT 
         DATE(tc.completed_at) as completion_date,
-        COUNT(tc.completion_id) as completions,
-        SUM(tc.points_earned) as points_earned,
-        COUNT(DISTINCT tc.completed_by_user_id) as active_users
+        COUNT(DISTINCT tc.completion_id) as completion_count,
+        COALESCE(SUM(tc.points_earned), 0) as total_points,
+        COUNT(DISTINCT tc.completed_by) as active_users
       FROM task_completions tc
       JOIN tasks t ON tc.task_id = t.task_id
-      WHERE t.household_id = ? 
-        AND tc.completed_at >= DATE_SUB(CURDATE(), INTERVAL ? DAY)
+      WHERE t.household_id = ? ${dateFilter}
       GROUP BY DATE(tc.completed_at)
-      ORDER BY completion_date
-    `, [householdId, period]);
+      ORDER BY completion_date ASC
+    `, [householdId, ...dateParams]);
 
-    // 2. Category distribution
-    const categoryDistribution = await query(`
-      SELECT 
-        cat.name as category_name,
-        cat.icon as category_icon,
-        cat.color as category_color,
-        COUNT(tc.completion_id) as completions,
-        SUM(tc.points_earned) as points_earned,
-        ROUND(COUNT(tc.completion_id) * 100.0 / (
-          SELECT COUNT(*) FROM task_completions tc2 
-          JOIN tasks t2 ON tc2.task_id = t2.task_id 
-          WHERE t2.household_id = ? AND tc2.completed_at >= DATE_SUB(CURDATE(), INTERVAL ? DAY)
-        ), 1) as completion_percentage
-      FROM task_categories cat
-      JOIN tasks t ON cat.category_id = t.category_id
-      JOIN task_completions tc ON t.task_id = tc.task_id
-      WHERE t.household_id = ? 
-        AND tc.completed_at >= DATE_SUB(CURDATE(), INTERVAL ? DAY)
-      GROUP BY cat.category_id, cat.name, cat.icon, cat.color
-      ORDER BY completions DESC
-    `, [householdId, period, householdId, period]);
-
-    // 3. User performance comparison
+    // 2. User Performance Comparison
     const userPerformance = await query(`
       SELECT 
         u.user_id,
         u.first_name,
         u.last_name,
-        COUNT(tc.completion_id) as completions,
-        SUM(tc.points_earned) as points_earned,
-        AVG(t.difficulty_minutes) as avg_task_difficulty,
+        u.profile_image,
+        COUNT(DISTINCT tc.completion_id) as completion_count,
+        COALESCE(SUM(tc.points_earned), 0) as total_points,
+        COALESCE(AVG(tc.points_earned), 0) as avg_points_per_task,
         COUNT(DISTINCT DATE(tc.completed_at)) as active_days,
-        COUNT(DISTINCT t.category_id) as categories_completed
-      FROM users u
-      JOIN household_members hm ON u.user_id = hm.user_id
-      LEFT JOIN task_completions tc ON u.user_id = tc.completed_by_user_id 
-        AND tc.completed_at >= DATE_SUB(CURDATE(), INTERVAL ? DAY)
+        -- Ranking
+        RANK() OVER (ORDER BY SUM(tc.points_earned) DESC) as points_rank,
+        RANK() OVER (ORDER BY COUNT(tc.completion_id) DESC) as completion_rank
+      FROM household_members hm
+      JOIN users u ON hm.user_id = u.user_id
+      LEFT JOIN task_completions tc ON u.user_id = tc.completed_by ${dateFilter}
       LEFT JOIN tasks t ON tc.task_id = t.task_id AND t.household_id = ?
       WHERE hm.household_id = ? AND hm.is_active = 1 AND u.is_active = 1
-      GROUP BY u.user_id, u.first_name, u.last_name
-      ORDER BY points_earned DESC
-    `, [period, householdId, householdId]);
+      GROUP BY u.user_id, u.first_name, u.last_name, u.profile_image
+      ORDER BY total_points DESC
+    `, [...dateParams, householdId, householdId]);
 
-    // 4. Task difficulty analysis
+    // 3. Category Analysis
+    const categoryAnalysis = await query(`
+      SELECT 
+        cat.category_id,
+        cat.name,
+        cat.icon,
+        cat.color,
+        COUNT(DISTINCT tc.completion_id) as completion_count,
+        COALESCE(SUM(tc.points_earned), 0) as total_points,
+        COALESCE(AVG(tc.points_earned), 0) as avg_points,
+        COUNT(DISTINCT tc.completed_by) as unique_completers,
+        COUNT(DISTINCT t.task_id) as task_count
+      FROM task_categories cat
+      LEFT JOIN tasks t ON cat.category_id = t.category_id AND t.household_id = ? AND t.is_active = 1
+      LEFT JOIN task_completions tc ON t.task_id = tc.task_id ${dateFilter}
+      WHERE cat.is_active = 1
+      GROUP BY cat.category_id, cat.name, cat.icon, cat.color
+      HAVING completion_count > 0
+      ORDER BY completion_count DESC
+    `, [householdId, ...dateParams]);
+
+    // 4. Task Difficulty Analysis
     const difficultyAnalysis = await query(`
       SELECT 
         CASE 
-          WHEN t.difficulty_minutes <= 15 THEN 'Enostavno (≤15 min)'
-          WHEN t.difficulty_minutes <= 30 THEN 'Srednje (16-30 min)'
-          WHEN t.difficulty_minutes <= 60 THEN 'Zahtevno (31-60 min)'
-          ELSE 'Zelo zahtevno (>60 min)'
+          WHEN t.difficulty_minutes <= 15 THEN 'Lahko'
+          WHEN t.difficulty_minutes <= 30 THEN 'Srednje'
+          WHEN t.difficulty_minutes <= 60 THEN 'Težko'
+          ELSE 'Zelo težko'
         END as difficulty_level,
-        COUNT(tc.completion_id) as completions,
-        SUM(tc.points_earned) as points_earned,
-        AVG(t.difficulty_minutes) as avg_minutes,
-        COUNT(DISTINCT tc.completed_by_user_id) as unique_completers
-      FROM task_completions tc
-      JOIN tasks t ON tc.task_id = t.task_id
-      WHERE t.household_id = ? 
-        AND tc.completed_at >= DATE_SUB(CURDATE(), INTERVAL ? DAY)
-      GROUP BY difficulty_level
-      ORDER BY avg_minutes
-    `, [householdId, period]);
-
-    // 5. Assignment vs completion rates
-    const completionRates = await query(`
-      SELECT 
-        DATE(ta.created_at) as assignment_date,
-        COUNT(ta.assignment_id) as assignments_created,
-        COUNT(CASE WHEN ta.status = 'completed' THEN ta.assignment_id END) as assignments_completed,
-        ROUND(COUNT(CASE WHEN ta.status = 'completed' THEN ta.assignment_id END) * 100.0 / COUNT(ta.assignment_id), 1) as completion_rate
-      FROM task_assignments ta
-      JOIN tasks t ON ta.task_id = t.task_id
-      WHERE t.household_id = ? 
-        AND ta.created_at >= DATE_SUB(CURDATE(), INTERVAL ? DAY)
-      GROUP BY DATE(ta.created_at)
-      HAVING assignments_created > 0
-      ORDER BY assignment_date
-    `, [householdId, period]);
+        t.difficulty_minutes,
+        COUNT(DISTINCT tc.completion_id) as completion_count,
+        COALESCE(SUM(tc.points_earned), 0) as total_points,
+        COALESCE(AVG(tc.points_earned), 0) as avg_points,
+        COUNT(DISTINCT t.task_id) as task_count
+      FROM tasks t
+      LEFT JOIN task_completions tc ON t.task_id = tc.task_id ${dateFilter}
+      WHERE t.household_id = ? AND t.is_active = 1
+      GROUP BY 
+        CASE 
+          WHEN t.difficulty_minutes <= 15 THEN 'Lahko'
+          WHEN t.difficulty_minutes <= 30 THEN 'Srednje'
+          WHEN t.difficulty_minutes <= 60 THEN 'Težko'
+          ELSE 'Zelo težko'
+        END,
+        t.difficulty_minutes
+      ORDER BY t.difficulty_minutes ASC
+    `, [...dateParams, householdId]);
 
     res.json({
       success: true,
       data: {
-        period_days: parseInt(period),
-        daily_timeline: dailyTimeline,
-        category_distribution: categoryDistribution,
+        period: period,
+        date_range: {
+          start: start_date || `${period} ago`,
+          end: end_date || 'now'
+        },
+        trends: completionTrends,
         user_performance: userPerformance,
-        difficulty_analysis: difficultyAnalysis,
-        completion_rates: completionRates
+        category_analysis: categoryAnalysis,
+        difficulty_analysis: difficultyAnalysis
       }
     });
 

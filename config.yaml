@@ -1,0 +1,45 @@
+name: "HisniHeroj - Family Tasks Manager"
+version: "1.0.0"
+slug: "hisniheroj"
+description: "Družinska aplikacija za upravljanje opravil, točk in nagrad"
+url: "https://github.com/your-repo/hisniheroj-addon"
+startup: application
+boot: auto
+init: false
+arch:
+  - armhf
+  - armv7
+  - aarch64
+  - amd64
+  - i386
+
+ports:
+  "3000/tcp": 3000
+
+ports_description:
+  "3000/tcp": "API server port za Flutter aplikacijo"
+
+options:
+  database_host: "core-mariadb"
+  database_port: 5123
+  database_name: "hisniheroj"
+  database_user: "hisniheroj"
+  database_password: "admin123"
+  jwt_secret: "your-super-secret-jwt-key-change-this-in-production"
+  upload_max_size: 10485760
+  cors_origin: "*"
+  debug: false
+
+schema:
+  database_host: str
+  database_port: port
+  database_name: str
+  database_user: str
+  database_password: str
+  jwt_secret: str
+  upload_max_size: int(1048576,52428800)?
+  cors_origin: str?
+  debug: bool?
+
+map:
+  - "share:rw" 

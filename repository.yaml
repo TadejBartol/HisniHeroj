@@ -1,0 +1,6 @@
+# HisniHeroj Add-on Repository
+# https://developers.home-assistant.io/docs/add-ons/repository
+
+name: HisniHeroj Add-on Repository
+url: 'https://github.com/YOUR_USERNAME/hisniheroj-addon'
+maintainer: 'Your Name <your.email@example.com>' 

@@ -404,18 +404,14 @@ router.delete('/account', validate(userSchemas.deleteAccount), async (req, res) 
     // Deactivate user (soft delete)
     await query(`
       UPDATE users 
-      SET 
-        is_active = 0,
-        updated_at = NOW()
+      SET is_active = 0
       WHERE user_id = ?
     `, [req.user.userId]);
 
     // Deactivate household memberships
     await query(`
       UPDATE household_members 
-      SET 
-        is_active = 0,
-        updated_at = NOW()
+      SET is_active = 0
       WHERE user_id = ?
     `, [req.user.userId]);
 

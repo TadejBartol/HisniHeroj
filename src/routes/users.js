@@ -385,7 +385,7 @@ router.delete('/account', (req, res, next) => {
     // Get current password hash
     const user = await queryOne(
       'SELECT password_hash FROM users WHERE user_id = ?',
-      [req.user.userId]
+      [req.user.user_id]
     );
 
     if (!user) {
@@ -412,21 +412,21 @@ router.delete('/account', (req, res, next) => {
     }
 
     // Deactivate user (soft delete)
-    console.log(`🗑️ Deactivating user ${req.user.userId}`);
+    console.log(`🗑️ Deactivating user ${req.user.user_id}`);
     const userResult = await query(`
       UPDATE users 
       SET is_active = 0
       WHERE user_id = ?
-    `, [req.user.userId]);
+    `, [req.user.user_id]);
     console.log(`✅ User update result:`, userResult);
 
     // Deactivate household memberships
-    console.log(`🏠 Deactivating household memberships for user ${req.user.userId}`);
+    console.log(`🏠 Deactivating household memberships for user ${req.user.user_id}`);
     const memberResult = await query(`
       UPDATE household_members 
       SET is_active = 0
       WHERE user_id = ?
-    `, [req.user.userId]);
+    `, [req.user.user_id]);
     console.log(`✅ Household member update result:`, memberResult);
 
     res.json({

@@ -9,7 +9,6 @@ const { queryOne } = require('../models/database');
  * JWT Authentication Middleware
  */
 async function authMiddleware(req, res, next) {
-  console.log('DEBUG: authMiddleware function called');
   try {
     // Get token from Authorization header
     const authHeader = req.headers.authorization;
@@ -226,9 +225,6 @@ function requireAdminAccess(req, res, next) {
 
   next();
 }
-
-console.log('DEBUG: auth.js - authMiddleware type:', typeof authMiddleware);
-console.log('DEBUG: auth.js - About to export authenticate as:', typeof authMiddleware);
 
 module.exports = {
   authenticate: authMiddleware,

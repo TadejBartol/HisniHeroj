@@ -22,35 +22,13 @@ const dashboardRoutes = require('./routes/dashboard');
 const imageRoutes = require('./routes/images');
 
 // Import middleware
-console.log('DEBUG: About to import auth middleware...');
-const authModule = require('./middleware/auth');
-console.log('DEBUG: Auth module imported:', Object.keys(authModule));
-console.log('DEBUG: Auth module authenticate type:', typeof authModule.authenticate);
-const { authenticate } = authModule;
-console.log('DEBUG: Destructured authenticate type:', typeof authenticate);
-
+const { authenticate } = require('./middleware/auth');
 const { errorHandler, notFoundHandler } = require('./middleware/validation');
 
 // Import database
 const { testConnection, runScheduledTasks } = require('./models/database');
 
-// =============================================================================
-// DEBUG: Check all imports
-// =============================================================================
-console.log('=== DEBUG: Checking imports ===');
-console.log('authRoutes:', typeof authRoutes, authRoutes ? '✅' : '❌');
-console.log('userRoutes:', typeof userRoutes, userRoutes ? '✅' : '❌');
-console.log('householdRoutes:', typeof householdRoutes, householdRoutes ? '✅' : '❌');
-console.log('taskRoutes:', typeof taskRoutes, taskRoutes ? '✅' : '❌');
-console.log('assignmentRoutes:', typeof assignmentRoutes, assignmentRoutes ? '✅' : '❌');
-console.log('completionRoutes:', typeof completionRoutes, completionRoutes ? '✅' : '❌');
-console.log('rewardRoutes:', typeof rewardRoutes, rewardRoutes ? '✅' : '❌');
-console.log('dashboardRoutes:', typeof dashboardRoutes, dashboardRoutes ? '✅' : '❌');
-console.log('imageRoutes:', typeof imageRoutes, imageRoutes ? '✅' : '❌');
-console.log('authenticate:', typeof authenticate, authenticate ? '✅' : '❌');
-console.log('errorHandler:', typeof errorHandler, errorHandler ? '✅' : '❌');
-console.log('notFoundHandler:', typeof notFoundHandler, notFoundHandler ? '✅' : '❌');
-console.log('=== END DEBUG ===');
+
 
 // =============================================================================
 // CONFIGURATION

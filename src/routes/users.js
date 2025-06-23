@@ -37,8 +37,8 @@ router.get('/profile', async (req, res) => {
       FROM users u
       LEFT JOIN household_members hm ON u.user_id = hm.user_id AND hm.is_active = 1
       LEFT JOIN households h ON hm.household_id = h.household_id AND h.is_active = 1
-      LEFT JOIN task_completions tc ON u.user_id = tc.completed_by_user_id
-      LEFT JOIN reward_claims rc ON u.user_id = rc.claimed_by_user_id AND rc.is_fulfilled = 1
+      LEFT JOIN task_completions tc ON u.user_id = tc.completed_by
+      LEFT JOIN reward_claims rc ON u.user_id = rc.claimed_by AND rc.status = 'fulfilled'
       WHERE u.user_id = ? AND u.is_active = 1
       GROUP BY u.user_id, h.household_id
     `, [req.user.userId]);

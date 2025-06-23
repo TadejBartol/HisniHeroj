@@ -5,14 +5,10 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const { query, queryOne } = require('../models/database');
-const { authenticate } = require('../middleware/auth');
 const { validate, userSchemas } = require('../middleware/validation');
 const { uploadSingle } = require('../utils/upload');
 
 const router = express.Router();
-
-// Apply authentication to all user routes
-router.use(authenticate);
 
 // =============================================================================
 // GET /users/profile - Get User Profile

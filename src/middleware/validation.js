@@ -164,32 +164,6 @@ const completionSchemas = {
   })
 };
 
-// User schemas
- const userSchemas = {
-   updateProfile: Joi.object({
-     first_name: Joi.string().min(2).max(50).required().messages({
-       'string.min': 'Ime mora imeti vsaj 2 znaka',
-       'string.max': 'Ime je predolgo',
-       'any.required': 'Ime je obvezno'
-     }),
-     last_name: Joi.string().min(2).max(50).required().messages({
-       'string.min': 'Priimek mora imeti vsaj 2 znaka',
-       'string.max': 'Priimek je predolg',
-       'any.required': 'Priimek je obvezen'
-     })
-   }),
-
-   changePassword: Joi.object({
-     current_password: Joi.string().required().messages({
-       'any.required': 'Trenutno geslo je obvezno'
-     }),
-     new_password: Joi.string().min(8).required().messages({
-       'string.min': 'Novo geslo mora imeti vsaj 8 znakov',
-       'any.required': 'Novo geslo je obvezno'
-     })
-   })
- };
-
 // Reward schemas
 const rewardSchemas = {
   create: Joi.object({
@@ -292,7 +266,6 @@ function errorHandler(error, req, res, next) {
 module.exports = {
   validate,
   authSchemas,
-  userSchemas,
   householdSchemas,
   taskSchemas,
   completionSchemas,

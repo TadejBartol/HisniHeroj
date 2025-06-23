@@ -402,18 +402,22 @@ router.delete('/account', validate(userSchemas.deleteAccount), async (req, res) 
     }
 
     // Deactivate user (soft delete)
-    await query(`
+    console.log(`🗑️ Deactivating user ${req.user.userId}`);
+    const userResult = await query(`
       UPDATE users 
       SET is_active = 0
       WHERE user_id = ?
     `, [req.user.userId]);
+    console.log(`✅ User update result:`, userResult);
 
     // Deactivate household memberships
-    await query(`
+    console.log(`🏠 Deactivating household memberships for user ${req.user.userId}`);
+    const memberResult = await query(`
       UPDATE household_members 
       SET is_active = 0
       WHERE user_id = ?
     `, [req.user.userId]);
+    console.log(`✅ Household member update result:`, memberResult);
 
     res.json({
       success: true,

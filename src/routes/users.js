@@ -368,8 +368,12 @@ router.get('/stats', async (req, res) => {
 // DELETE /users/account - Deactivate Account
 // =============================================================================
 
-router.delete('/account', validate(userSchemas.deleteAccount), async (req, res) => {
+router.delete('/account', authenticate, validate(userSchemas.deleteAccount), async (req, res) => {
   try {
+    console.log('🗑️ DELETE /account request received');
+    console.log('🔍 Request body:', req.body);
+    console.log('👤 Authenticated user:', req.user);
+    
     const { password } = req.body;
 
     // Get current password hash

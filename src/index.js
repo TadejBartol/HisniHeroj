@@ -22,7 +22,7 @@ const dashboardRoutes = require('./routes/dashboard');
 const imageRoutes = require('./routes/images');
 
 // Import middleware
-const authMiddleware = require('./middleware/auth');
+const { authenticate } = require('./middleware/auth');
 const { errorHandler, notFoundHandler } = require('./middleware/validation');
 
 // Import database
@@ -120,13 +120,13 @@ app.get('/api/v1/health', (req, res) => {
 
 // API routes
 app.use('/api/v1/auth', authRoutes);
-app.use('/api/v1/users', authMiddleware, userRoutes);
-app.use('/api/v1/households', authMiddleware, householdRoutes);
-app.use('/api/v1/tasks', authMiddleware, taskRoutes);
-app.use('/api/v1/assignments', authMiddleware, assignmentRoutes);
-app.use('/api/v1/completions', authMiddleware, completionRoutes);
-app.use('/api/v1/rewards', authMiddleware, rewardRoutes);
-app.use('/api/v1/dashboard', authMiddleware, dashboardRoutes);
+app.use('/api/v1/users', authenticate, userRoutes);
+app.use('/api/v1/households', authenticate, householdRoutes);
+app.use('/api/v1/tasks', authenticate, taskRoutes);
+app.use('/api/v1/assignments', authenticate, assignmentRoutes);
+app.use('/api/v1/completions', authenticate, completionRoutes);
+app.use('/api/v1/rewards', authenticate, rewardRoutes);
+app.use('/api/v1/dashboard', authenticate, dashboardRoutes);
 app.use('/api/v1/images', imageRoutes); // Some image routes don't need auth
 
 // Serve static files for images

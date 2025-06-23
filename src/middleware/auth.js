@@ -10,6 +10,9 @@ const { queryOne } = require('../models/database');
  */
 async function authMiddleware(req, res, next) {
   try {
+    console.log('🔐 AUTH MIDDLEWARE START');
+    console.log('🔐 Headers:', req.headers.authorization);
+    
     // Get token from Authorization header
     const authHeader = req.headers.authorization;
     
@@ -36,9 +39,12 @@ async function authMiddleware(req, res, next) {
     }
 
     // Verify JWT token
+    console.log('🔐 Verifying JWT token...');
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    console.log('🔐 Token decoded:', decoded);
     
     // Get user from database
+    console.log('🔐 Getting user from database...');
     const user = await queryOne(`
       SELECT 
         u.user_id, 
@@ -49,6 +55,7 @@ async function authMiddleware(req, res, next) {
       FROM users u 
       WHERE u.user_id = ? AND u.is_active = 1
     `, [decoded.userId]);
+    console.log('🔐 User from DB:', user);
 
     if (!user) {
       return res.status(401).json({
@@ -64,6 +71,7 @@ async function authMiddleware(req, res, next) {
     req.user = user;
     req.userId = user.user_id;
     
+    console.log('🔐 AUTH MIDDLEWARE SUCCESS - calling next()');
     next();
 
   } catch (error) {

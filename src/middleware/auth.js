@@ -227,6 +227,7 @@ function requireAdminAccess(req, res, next) {
 }
 
 module.exports = {
+  authenticate: authMiddleware,
   authMiddleware,
   requireHouseholdAccess,
   requirePermission,

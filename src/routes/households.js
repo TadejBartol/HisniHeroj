@@ -43,7 +43,7 @@ router.post('/', validate(householdSchemas.create), async (req, res) => {
 
     // Create household
     const householdResult = await connection.execute(`
-      INSERT INTO households (name, description, invite_code, created_by_user_id, created_at)
+      INSERT INTO households (name, description, invite_code, owner_id, created_at)
       VALUES (?, ?, ?, ?, NOW())
     `, [name, description, inviteCode, req.user.userId]);
 
@@ -76,7 +76,7 @@ router.post('/', validate(householdSchemas.create), async (req, res) => {
         (SELECT COUNT(*) FROM tasks t 
          WHERE t.household_id = h.household_id AND t.is_active = 1) as task_count
       FROM households h
-      JOIN users u ON h.created_by_user_id = u.user_id
+      JOIN users u ON h.owner_id = u.user_id
       WHERE h.household_id = ?
     `, [householdId]);
 

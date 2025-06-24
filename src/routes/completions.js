@@ -24,7 +24,7 @@ router.get('/', async (req, res) => {
     } = req.query;
 
     // Build WHERE clause
-    let whereConditions = ['tc.completed_by_user_id = ?'];
+    let whereConditions = ['tc.completed_by = ?'];
     let whereParams = [req.user.userId];
 
     if (household_id) {
@@ -84,10 +84,10 @@ router.get('/', async (req, res) => {
         ta.due_date as assignment_due_date,
         CASE WHEN ta.due_date < tc.completed_at THEN 1 ELSE 0 END as was_overdue
       FROM task_completions tc
-      JOIN tasks t ON tc.task_id = t.task_id
+      JOIN task_assignments ta ON tc.assignment_id = ta.assignment_id
+      JOIN tasks t ON ta.task_id = t.task_id
       JOIN task_categories cat ON t.category_id = cat.category_id
       JOIN households h ON t.household_id = h.household_id
-      LEFT JOIN task_assignments ta ON tc.assignment_id = ta.assignment_id
       WHERE ${whereClause}
       ORDER BY tc.completed_at DESC
       LIMIT ? OFFSET ?
@@ -97,7 +97,8 @@ router.get('/', async (req, res) => {
     const totalResult = await queryOne(`
       SELECT COUNT(*) as total
       FROM task_completions tc
-      JOIN tasks t ON tc.task_id = t.task_id
+      JOIN task_assignments ta ON tc.assignment_id = ta.assignment_id
+      JOIN tasks t ON ta.task_id = t.task_id
       WHERE ${whereClause}
     `, whereParams);
 
@@ -139,7 +140,7 @@ router.get('/:id', async (req, res) => {
         tc.completion_id,
         tc.task_id,
         tc.assignment_id,
-        tc.completed_by_user_id,
+        tc.completed_by,
         tc.completed_at,
         tc.points_earned,
         tc.comment,
@@ -167,11 +168,11 @@ router.get('/:id', async (req, res) => {
         assigner.last_name as assigned_by_last_name,
         CASE WHEN ta.due_date < tc.completed_at THEN 1 ELSE 0 END as was_overdue
       FROM task_completions tc
-      JOIN tasks t ON tc.task_id = t.task_id
+      JOIN task_assignments ta ON tc.assignment_id = ta.assignment_id
+      JOIN tasks t ON ta.task_id = t.task_id
       JOIN task_categories cat ON t.category_id = cat.category_id
       JOIN households h ON t.household_id = h.household_id
-      JOIN users u ON tc.completed_by_user_id = u.user_id
-      LEFT JOIN task_assignments ta ON tc.assignment_id = ta.assignment_id
+      JOIN users u ON tc.completed_by = u.user_id
       LEFT JOIN users assigner ON ta.assigned_by_user_id = assigner.user_id
       WHERE tc.completion_id = ?
     `, [completionId]);
@@ -187,7 +188,7 @@ router.get('/:id', async (req, res) => {
     }
 
     // Check if user has access (either the completer or household member)
-    const hasAccess = completion.completed_by_user_id === req.user.userId ||
+    const hasAccess = completion.completed_by === req.user.userId ||
                       await queryOne(`
                         SELECT membership_id FROM household_members 
                         WHERE household_id = ? AND user_id = ? AND is_active = 1
@@ -344,7 +345,7 @@ router.post('/', validate(completionSchemas.create), async (req, res) => {
     // Create completion record
     const completionResult = await connection.execute(`
       INSERT INTO task_completions (
-        task_id, assignment_id, completed_by_user_id, 
+        task_id, assignment_id, completed_by, 
         completed_at, points_earned, comment, proof_image
       ) VALUES (?, ?, ?, NOW(), ?, ?, ?)
     `, [
@@ -383,7 +384,8 @@ router.post('/', validate(completionSchemas.create), async (req, res) => {
         cat.name as category_name,
         cat.icon as category_icon
       FROM task_completions tc
-      JOIN tasks t ON tc.task_id = t.task_id
+      JOIN task_assignments ta ON tc.assignment_id = ta.assignment_id
+      JOIN tasks t ON ta.task_id = t.task_id
       JOIN task_categories cat ON t.category_id = cat.category_id
       WHERE tc.completion_id = ?
     `, [completionId]);
@@ -522,7 +524,7 @@ router.post('/with-photo', uploadSingle('proof_photo'), async (req, res) => {
     // Create completion record with uploaded photo
     const completionResult = await connection.execute(`
       INSERT INTO task_completions (
-        task_id, assignment_id, completed_by_user_id, 
+        task_id, assignment_id, completed_by, 
         completed_at, points_earned, comment, proof_image
       ) VALUES (?, ?, ?, NOW(), ?, ?, ?)
     `, [
@@ -616,12 +618,13 @@ router.put('/:id', validate(completionSchemas.update), async (req, res) => {
     const completion = await queryOne(`
       SELECT 
         tc.completion_id,
-        tc.completed_by_user_id,
+        tc.completed_by,
         tc.completed_at,
         t.title as task_title
       FROM task_completions tc
-      JOIN tasks t ON tc.task_id = t.task_id
-      WHERE tc.completion_id = ? AND tc.completed_by_user_id = ?
+      JOIN task_assignments ta ON tc.assignment_id = ta.assignment_id
+      JOIN tasks t ON ta.task_id = t.task_id
+      WHERE tc.completion_id = ? AND tc.completed_by = ?
     `, [completionId, req.user.userId]);
 
     if (!completion) {
@@ -717,8 +720,9 @@ router.get('/stats/summary', async (req, res) => {
         COUNT(DISTINCT tc.task_id) as unique_tasks_completed,
         COALESCE(AVG(tc.points_earned), 0) as avg_points_per_completion
       FROM task_completions tc
-      JOIN tasks t ON tc.task_id = t.task_id
-      WHERE tc.completed_by_user_id = ? ${householdCondition}
+      JOIN task_assignments ta ON tc.assignment_id = ta.assignment_id
+      JOIN tasks t ON ta.task_id = t.task_id
+      WHERE tc.completed_by = ? ${householdCondition}
     `, [period, period, req.user.userId, ...householdParams]);
 
     res.json({

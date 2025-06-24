@@ -61,7 +61,7 @@ router.get('/', async (req, res) => {
         r.household_id,
         r.title,
         r.description,
-        r.points_cost,
+        r.cost_points,
         r.quantity,
         r.is_active,
         r.created_at,
@@ -75,30 +75,32 @@ router.get('/', async (req, res) => {
         (SELECT COUNT(*) FROM reward_claims rc 
          WHERE rc.reward_id = r.reward_id) as total_claims,
         (SELECT COUNT(*) FROM reward_claims rc 
-         WHERE rc.reward_id = r.reward_id AND rc.is_fulfilled = 0) as pending_claims,
+         WHERE rc.reward_id = r.reward_id AND rc.status = 'pending') as pending_claims,
         -- User's available points (if household_id specified)
         ${household_id ? `
         (SELECT COALESCE(SUM(tc.points_earned), 0) - COALESCE(SUM(rc2.points_spent), 0)
          FROM task_completions tc
-         LEFT JOIN reward_claims rc2 ON rc2.claimed_by_user_id = tc.completed_by_user_id AND rc2.is_fulfilled = 1
-         JOIN tasks t ON tc.task_id = t.task_id
-         WHERE tc.completed_by_user_id = ? AND t.household_id = ?) as user_available_points,
+         LEFT JOIN reward_claims rc2 ON rc2.claimed_by = tc.completed_by AND rc2.status = 'fulfilled'
+         JOIN task_assignments ta ON tc.assignment_id = ta.assignment_id
+         JOIN tasks t ON ta.task_id = t.task_id
+         WHERE tc.completed_by = ? AND t.household_id = ?) as user_available_points,
         ` : 'NULL as user_available_points,'}
         -- Can user afford this reward
         ${household_id ? `
         CASE WHEN (
           SELECT COALESCE(SUM(tc.points_earned), 0) - COALESCE(SUM(rc2.points_spent), 0)
           FROM task_completions tc
-          LEFT JOIN reward_claims rc2 ON rc2.claimed_by_user_id = tc.completed_by_user_id AND rc2.is_fulfilled = 1
-          JOIN tasks t ON tc.task_id = t.task_id
-          WHERE tc.completed_by_user_id = ? AND t.household_id = ?
-        ) >= r.points_cost THEN 1 ELSE 0 END as can_afford
+          LEFT JOIN reward_claims rc2 ON rc2.claimed_by = tc.completed_by AND rc2.status = 'fulfilled'
+          JOIN task_assignments ta ON tc.assignment_id = ta.assignment_id
+          JOIN tasks t ON ta.task_id = t.task_id
+          WHERE tc.completed_by = ? AND t.household_id = ?
+        ) >= r.cost_points THEN 1 ELSE 0 END as can_afford
         ` : 'NULL as can_afford'}
       FROM rewards r
       JOIN households h ON r.household_id = h.household_id
-      JOIN users creator ON r.created_by_user_id = creator.user_id
+      JOIN users creator ON r.created_by = creator.user_id
       WHERE ${whereClause}
-      ORDER BY r.points_cost ASC, r.created_at DESC
+      ORDER BY r.cost_points ASC, r.created_at DESC
       LIMIT ? OFFSET ?
     `, [
       ...(household_id ? [req.user.userId, household_id, req.user.userId, household_id] : []),
@@ -153,12 +155,12 @@ router.get('/:id', async (req, res) => {
         r.household_id,
         r.title,
         r.description,
-        r.points_cost,
+        r.cost_points,
         r.quantity,
         r.is_active,
         r.created_at,
         r.updated_at,
-        r.created_by_user_id,
+        r.created_by,
         -- Household info
         h.name as household_name,
         -- Creator info
@@ -168,7 +170,7 @@ router.get('/:id', async (req, res) => {
         hm.role as user_role
       FROM rewards r
       JOIN households h ON r.household_id = h.household_id
-      JOIN users creator ON r.created_by_user_id = creator.user_id
+      JOIN users creator ON r.created_by = creator.user_id
       JOIN household_members hm ON r.household_id = hm.household_id
       WHERE r.reward_id = ? AND hm.user_id = ? AND hm.is_active = 1 AND r.is_active = 1
     `, [rewardId, req.user.userId]);
@@ -187,21 +189,17 @@ router.get('/:id', async (req, res) => {
     const recentClaims = await query(`
       SELECT 
         rc.claim_id,
-        rc.claimed_by_user_id,
+        rc.claimed_by,
         rc.claimed_at,
-        rc.is_fulfilled,
+        rc.status,
         rc.fulfilled_at,
         rc.points_spent,
         -- Claimed by user info
         u.first_name as claimed_by_first_name,
         u.last_name as claimed_by_last_name,
-        u.profile_image as claimed_by_profile_image,
-        -- Fulfilled by user info
-        fulfiller.first_name as fulfilled_by_first_name,
-        fulfiller.last_name as fulfilled_by_last_name
+        u.profile_image as claimed_by_profile_image
       FROM reward_claims rc
-      JOIN users u ON rc.claimed_by_user_id = u.user_id
-      LEFT JOIN users fulfiller ON rc.fulfilled_by_user_id = fulfiller.user_id
+      JOIN users u ON rc.claimed_by = u.user_id
       WHERE rc.reward_id = ?
       ORDER BY rc.claimed_at DESC
       LIMIT 10
@@ -212,9 +210,10 @@ router.get('/:id', async (req, res) => {
       SELECT 
         COALESCE(SUM(tc.points_earned), 0) - COALESCE(SUM(rc.points_spent), 0) as available_points
       FROM task_completions tc
-      LEFT JOIN reward_claims rc ON rc.claimed_by_user_id = tc.completed_by_user_id AND rc.is_fulfilled = 1
-      JOIN tasks t ON tc.task_id = t.task_id
-      WHERE tc.completed_by_user_id = ? AND t.household_id = ?
+      LEFT JOIN reward_claims rc ON rc.claimed_by = tc.completed_by AND rc.status = 'fulfilled'
+      JOIN task_assignments ta ON tc.assignment_id = ta.assignment_id
+      JOIN tasks t ON ta.task_id = t.task_id
+      WHERE tc.completed_by = ? AND t.household_id = ?
     `, [req.user.userId, reward.household_id]);
 
     res.json({
@@ -223,8 +222,8 @@ router.get('/:id', async (req, res) => {
         reward,
         recent_claims: recentClaims,
         user_available_points: userPoints.available_points,
-        can_afford: userPoints.available_points >= reward.points_cost,
-        can_claim: userPoints.available_points >= reward.points_cost && reward.quantity > 0
+        can_afford: userPoints.available_points >= reward.cost_points,
+        can_claim: userPoints.available_points >= reward.cost_points && reward.quantity > 0
       }
     });
 
@@ -288,8 +287,8 @@ router.post('/', validate(rewardSchemas.create), async (req, res) => {
     // Create reward
     const rewardResult = await query(`
       INSERT INTO rewards (
-        household_id, title, description, points_cost, quantity,
-        created_by_user_id, created_at
+        household_id, title, description, cost_points, quantity,
+        created_by, created_at
       ) VALUES (?, ?, ?, ?, ?, ?, NOW())
     `, [household_id, title, description, points_cost, quantity, req.user.userId]);
 
@@ -302,7 +301,7 @@ router.post('/', validate(rewardSchemas.create), async (req, res) => {
         r.household_id,
         r.title,
         r.description,
-        r.points_cost,
+        r.cost_points,
         r.quantity,
         r.created_at,
         -- Household info
@@ -342,7 +341,7 @@ router.put('/:id', validate(rewardSchemas.update), async (req, res) => {
     const {
       title,
       description,
-      points_cost,
+      cost_points,
       quantity
     } = req.body;
 
@@ -402,11 +401,11 @@ router.put('/:id', validate(rewardSchemas.update), async (req, res) => {
       SET 
         title = ?, 
         description = ?, 
-        points_cost = ?, 
+        cost_points = ?, 
         quantity = ?,
         updated_at = NOW()
       WHERE reward_id = ?
-    `, [title, description, points_cost, quantity, rewardId]);
+    `, [title, description, cost_points, quantity, rewardId]);
 
     // Fetch updated reward
     const reward = await queryOne(`
@@ -415,7 +414,7 @@ router.put('/:id', validate(rewardSchemas.update), async (req, res) => {
         r.household_id,
         r.title,
         r.description,
-        r.points_cost,
+        r.cost_points,
         r.quantity,
         r.created_at,
         r.updated_at,
@@ -509,7 +508,7 @@ router.delete('/:id', async (req, res) => {
     const pendingClaims = await queryOne(`
       SELECT COUNT(*) as pending_count
       FROM reward_claims 
-      WHERE reward_id = ? AND is_fulfilled = 0
+      WHERE reward_id = ? AND status = 'pending'
     `, [rewardId]);
 
     if (pendingClaims.pending_count > 0) {
@@ -569,7 +568,7 @@ router.post('/:id/claim', validate(rewardSchemas.claim), async (req, res) => {
         r.reward_id,
         r.household_id,
         r.title,
-        r.points_cost,
+        r.cost_points,
         r.quantity,
         r.is_active
       FROM rewards r
@@ -605,18 +604,19 @@ router.post('/:id/claim', validate(rewardSchemas.claim), async (req, res) => {
       SELECT 
         COALESCE(SUM(tc.points_earned), 0) - COALESCE(SUM(rc.points_spent), 0) as available_points
       FROM task_completions tc
-      LEFT JOIN reward_claims rc ON rc.claimed_by_user_id = tc.completed_by_user_id AND rc.is_fulfilled = 1
-      JOIN tasks t ON tc.task_id = t.task_id
-      WHERE tc.completed_by_user_id = ? AND t.household_id = ?
+      LEFT JOIN reward_claims rc ON rc.claimed_by = tc.completed_by AND rc.status = 'fulfilled'
+      JOIN task_assignments ta ON tc.assignment_id = ta.assignment_id
+      JOIN tasks t ON ta.task_id = t.task_id
+      WHERE tc.completed_by = ? AND t.household_id = ?
     `, [req.user.userId, reward.household_id]);
 
-    if (userPoints.available_points < reward.points_cost) {
+    if (userPoints.available_points < reward.cost_points) {
       await rollbackTransaction(connection);
       return res.status(400).json({
         success: false,
         error: {
           code: 'INSUFFICIENT_POINTS',
-          message: `Potrebujete ${reward.points_cost} točk, imate pa ${userPoints.available_points} točk`
+          message: `Potrebujete ${reward.cost_points} točk, imate pa ${userPoints.available_points} točk`
         }
       });
     }
@@ -624,9 +624,9 @@ router.post('/:id/claim', validate(rewardSchemas.claim), async (req, res) => {
     // Create reward claim
     const claimResult = await connection.execute(`
       INSERT INTO reward_claims (
-        reward_id, claimed_by_user_id, claimed_at, points_spent
+        reward_id, claimed_by, claimed_at, points_spent
       ) VALUES (?, ?, NOW(), ?)
-    `, [rewardId, req.user.userId, reward.points_cost]);
+    `, [rewardId, req.user.userId, reward.cost_points]);
 
     const claimId = claimResult[0].insertId;
 
@@ -649,7 +649,7 @@ router.post('/:id/claim', validate(rewardSchemas.claim), async (req, res) => {
         rc.reward_id,
         rc.claimed_at,
         rc.points_spent,
-        rc.is_fulfilled,
+        rc.status,
         -- Reward info
         r.title as reward_title,
         r.description as reward_description
@@ -662,8 +662,8 @@ router.post('/:id/claim', validate(rewardSchemas.claim), async (req, res) => {
       success: true,
       data: {
         claim,
-        remaining_points: userPoints.available_points - reward.points_cost,
-        message: `Uspešno ste uveljavljali nagradno "${reward.title}" za ${reward.points_cost} točk`
+        remaining_points: userPoints.available_points - reward.cost_points,
+        message: `Uspešno ste uveljavljali nagradno "${reward.title}" za ${reward.cost_points} točk`
       }
     });
 
@@ -697,7 +697,7 @@ router.get('/claims/my', async (req, res) => {
     } = req.query;
 
     // Build WHERE clause
-    let whereConditions = ['rc.claimed_by_user_id = ?'];
+    let whereConditions = ['rc.claimed_by = ?'];
     let whereParams = [req.user.userId];
 
     if (household_id) {
@@ -722,8 +722,8 @@ router.get('/claims/my', async (req, res) => {
     }
 
     if (is_fulfilled !== undefined) {
-      whereConditions.push('rc.is_fulfilled = ?');
-      whereParams.push(parseInt(is_fulfilled));
+      whereConditions.push('rc.status = ?');
+      whereParams.push(is_fulfilled === '1' ? 'fulfilled' : 'pending');
     }
 
     const whereClause = whereConditions.join(' AND ');
@@ -734,7 +734,7 @@ router.get('/claims/my', async (req, res) => {
         rc.claim_id,
         rc.reward_id,
         rc.claimed_at,
-        rc.is_fulfilled,
+        rc.status,
         rc.fulfilled_at,
         rc.points_spent,
         -- Reward info
@@ -801,8 +801,8 @@ router.post('/claims/:id/fulfill', async (req, res) => {
       SELECT 
         rc.claim_id,
         rc.reward_id,
-        rc.claimed_by_user_id,
-        rc.is_fulfilled,
+        rc.claimed_by,
+        rc.status,
         r.title as reward_title,
         r.household_id,
         -- Claimed by user info
@@ -810,7 +810,7 @@ router.post('/claims/:id/fulfill', async (req, res) => {
         u.last_name as claimed_by_last_name
       FROM reward_claims rc
       JOIN rewards r ON rc.reward_id = r.reward_id
-      JOIN users u ON rc.claimed_by_user_id = u.user_id
+      JOIN users u ON rc.claimed_by = u.user_id
       WHERE rc.claim_id = ?
     `, [claimId]);
 
@@ -855,7 +855,7 @@ router.post('/claims/:id/fulfill', async (req, res) => {
       });
     }
 
-    if (claimInfo.is_fulfilled) {
+    if (claimInfo.status === 'fulfilled') {
       return res.status(400).json({
         success: false,
         error: {
@@ -869,11 +869,10 @@ router.post('/claims/:id/fulfill', async (req, res) => {
     await query(`
       UPDATE reward_claims 
       SET 
-        is_fulfilled = 1,
-        fulfilled_at = NOW(),
-        fulfilled_by_user_id = ?
+        status = 'fulfilled',
+        fulfilled_at = NOW()
       WHERE claim_id = ?
-    `, [req.user.userId, claimId]);
+    `, [claimId]);
 
     res.json({
       success: true,

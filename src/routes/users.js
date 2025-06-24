@@ -308,8 +308,8 @@ router.get('/stats', async (req, res) => {
         -- Current balance
         COALESCE(SUM(tc.points_earned), 0) - COALESCE(SUM(rc.points_spent), 0) as current_balance
       FROM users u
-      LEFT JOIN task_completions tc ON u.user_id = tc.completed_by_user_id
-      LEFT JOIN reward_claims rc ON u.user_id = rc.claimed_by_user_id AND rc.is_fulfilled = 1
+      LEFT JOIN task_completions tc ON u.user_id = tc.completed_by
+              LEFT JOIN reward_claims rc ON u.user_id = rc.claimed_by AND rc.status = 'fulfilled'
       WHERE u.user_id = ?
     `, [period, period, req.user.userId]);
 
@@ -322,9 +322,10 @@ router.get('/stats', async (req, res) => {
         COALESCE(SUM(tc.points_earned), 0) as points_earned,
         AVG(tc.points_earned) as avg_points_per_task
       FROM task_completions tc
-      JOIN tasks t ON tc.task_id = t.task_id
+      JOIN task_assignments ta ON tc.assignment_id = ta.assignment_id
+      JOIN tasks t ON ta.task_id = t.task_id
       JOIN task_categories cat ON t.category_id = cat.category_id
-      WHERE tc.completed_by_user_id = ? 
+      WHERE tc.completed_by = ? 
         AND tc.completed_at >= DATE_SUB(NOW(), INTERVAL ? DAY)
       GROUP BY cat.category_id, cat.name, cat.icon
       ORDER BY points_earned DESC
@@ -337,7 +338,7 @@ router.get('/stats', async (req, res) => {
         COUNT(tc.completion_id) as completions,
         SUM(tc.points_earned) as points_earned
       FROM task_completions tc
-      WHERE tc.completed_by_user_id = ? 
+      WHERE tc.completed_by = ? 
         AND tc.completed_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)
       GROUP BY DATE(tc.completed_at)
       ORDER BY completion_date

@@ -531,7 +531,7 @@ router.put('/:id/members/:userId/role', validate(householdSchemas.updateMemberRo
     const member = await queryOne(`
       SELECT 
         hm.membership_id,
-        hm.role as current_role,
+        hm.role as member_role,
         u.first_name,
         u.last_name
       FROM household_members hm

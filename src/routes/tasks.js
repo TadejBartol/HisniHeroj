@@ -250,7 +250,7 @@ router.get('/:id', async (req, res) => {
     const recentCompletions = await query(`
       SELECT 
         tc.completion_id,
-        tc.completed_by_user_id,
+        tc.completed_by,
         tc.completed_at,
         tc.points_earned,
         tc.comment,
@@ -260,8 +260,9 @@ router.get('/:id', async (req, res) => {
         u.last_name as completed_by_last_name,
         u.profile_image as completed_by_profile_image
       FROM task_completions tc
-      JOIN users u ON tc.completed_by_user_id = u.user_id
-      WHERE tc.task_id = ?
+      JOIN users u ON tc.completed_by = u.user_id
+      JOIN task_assignments ta ON tc.assignment_id = ta.assignment_id
+      WHERE ta.task_id = ?
       ORDER BY tc.completed_at DESC
       LIMIT 10
     `, [taskId]);
@@ -356,7 +357,7 @@ router.post('/', validate(taskSchemas.create), async (req, res) => {
       INSERT INTO tasks (
         household_id, title, description, category_id, 
         difficulty_minutes, frequency, requires_photo, auto_assign, 
-        created_by_user_id, created_at
+        created_by, created_at
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
     `, [
       household_id, title, description, category_id,
@@ -689,17 +690,17 @@ router.get('/:id/stats', async (req, res) => {
       SELECT 
         COUNT(DISTINCT tc.completion_id) as total_completions,
         COUNT(DISTINCT CASE WHEN tc.completed_at >= DATE_SUB(NOW(), INTERVAL ? DAY) THEN tc.completion_id END) as recent_completions,
-        COUNT(DISTINCT tc.completed_by_user_id) as unique_completers,
+        COUNT(DISTINCT tc.completed_by) as unique_completers,
         COALESCE(SUM(tc.points_earned), 0) as total_points_awarded,
         COALESCE(AVG(tc.points_earned), 0) as avg_points_per_completion,
         -- Assignment stats
         COUNT(DISTINCT ta.assignment_id) as total_assignments,
         COUNT(DISTINCT CASE WHEN ta.status = 'pending' AND ta.is_active = 1 THEN ta.assignment_id END) as pending_assignments,
         COUNT(DISTINCT CASE WHEN ta.status = 'overdue' AND ta.is_active = 1 THEN ta.assignment_id END) as overdue_assignments
-      FROM tasks t
-      LEFT JOIN task_completions tc ON t.task_id = tc.task_id
-      LEFT JOIN task_assignments ta ON t.task_id = ta.task_id
-      WHERE t.task_id = ?
+              FROM tasks t
+        LEFT JOIN task_assignments ta ON t.task_id = ta.task_id
+        LEFT JOIN task_completions tc ON ta.assignment_id = tc.assignment_id
+        WHERE t.task_id = ?
     `, [period, taskId]);
 
     // Completion by user
@@ -713,8 +714,9 @@ router.get('/:id/stats', async (req, res) => {
         COALESCE(SUM(tc.points_earned), 0) as points_earned,
         MAX(tc.completed_at) as last_completed
       FROM task_completions tc
-      JOIN users u ON tc.completed_by_user_id = u.user_id
-      WHERE tc.task_id = ? AND tc.completed_at >= DATE_SUB(NOW(), INTERVAL ? DAY)
+      JOIN users u ON tc.completed_by = u.user_id
+      JOIN task_assignments ta ON tc.assignment_id = ta.assignment_id
+      WHERE ta.task_id = ? AND tc.completed_at >= DATE_SUB(NOW(), INTERVAL ? DAY)
       GROUP BY u.user_id, u.first_name, u.last_name, u.profile_image
       ORDER BY completions DESC, points_earned DESC
     `, [taskId, period]);
@@ -726,7 +728,8 @@ router.get('/:id/stats', async (req, res) => {
         COUNT(tc.completion_id) as completions,
         SUM(tc.points_earned) as points_earned
       FROM task_completions tc
-      WHERE tc.task_id = ? AND tc.completed_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)
+      JOIN task_assignments ta ON tc.assignment_id = ta.assignment_id
+      WHERE ta.task_id = ? AND tc.completed_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)
       GROUP BY DATE(tc.completed_at)
       ORDER BY completion_date
     `, [taskId]);

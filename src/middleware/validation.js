@@ -93,8 +93,8 @@ const householdSchemas = {
   }),
 
   join: Joi.object({
-    invite_code: Joi.string().length(6).required().messages({
-      'string.length': 'Invite koda mora imeti 6 znakov',
+    invite_code: Joi.string().length(8).required().messages({
+      'string.length': 'Invite koda mora imeti 8 znakov',
       'any.required': 'Invite koda je obvezna'
     })
   }),

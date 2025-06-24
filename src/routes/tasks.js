@@ -291,8 +291,7 @@ router.get('/:id', async (req, res) => {
 // POST /tasks - Create New Task
 // =============================================================================
 
-router.post('/', requireHouseholdAccess, requirePermission('can_create_tasks'), 
-  validate(taskSchemas.create), async (req, res) => {
+router.post('/', validate(taskSchemas.create), async (req, res) => {
   try {
     const {
       household_id,
@@ -304,6 +303,37 @@ router.post('/', requireHouseholdAccess, requirePermission('can_create_tasks'),
       requires_photo = false,
       auto_assign = false
     } = req.body;
+
+    // Verify access and permissions
+    const hasAccess = await queryOne(`
+      SELECT 
+        hm.membership_id,
+        hm.role,
+        hm.can_create_tasks
+      FROM household_members hm
+      WHERE hm.household_id = ? AND hm.user_id = ? AND hm.is_active = 1
+    `, [household_id, req.user.userId]);
+
+    if (!hasAccess) {
+      return res.status(403).json({
+        success: false,
+        error: {
+          code: 'HOUSEHOLD_ACCESS_DENIED',
+          message: 'Nimate dostopa do tega doma'
+        }
+      });
+    }
+
+    // Check can_create_tasks permission
+    if (hasAccess.role !== 'owner' && hasAccess.role !== 'admin' && !hasAccess.can_create_tasks) {
+      return res.status(403).json({
+        success: false,
+        error: {
+          code: 'INSUFFICIENT_PERMISSIONS',
+          message: 'Nimate dovoljenj za ustvarjanje opravil'
+        }
+      });
+    }
 
     // Verify category exists
     const category = await queryOne(
@@ -385,8 +415,7 @@ router.post('/', requireHouseholdAccess, requirePermission('can_create_tasks'),
 // PUT /tasks/:id - Update Task
 // =============================================================================
 
-router.put('/:id', requireHouseholdAccess, requirePermission('can_create_tasks'), 
-  validate(taskSchemas.update), async (req, res) => {
+router.put('/:id', validate(taskSchemas.update), async (req, res) => {
   try {
     const taskId = req.params.id;
     const {
@@ -399,16 +428,14 @@ router.put('/:id', requireHouseholdAccess, requirePermission('can_create_tasks')
       auto_assign
     } = req.body;
 
-    // Check if task exists and user has access
+    // Check if task exists and get household_id
     const existingTask = await queryOne(`
       SELECT 
         t.task_id,
-        t.household_id,
-        hm.role as user_role
+        t.household_id
       FROM tasks t
-      JOIN household_members hm ON t.household_id = hm.household_id
-      WHERE t.task_id = ? AND hm.user_id = ? AND hm.is_active = 1 AND t.is_active = 1
-    `, [taskId, req.user.userId]);
+      WHERE t.task_id = ? AND t.is_active = 1
+    `, [taskId]);
 
     if (!existingTask) {
       return res.status(404).json({
@@ -419,6 +446,39 @@ router.put('/:id', requireHouseholdAccess, requirePermission('can_create_tasks')
         }
       });
     }
+
+    // Verify access and permissions
+    const hasAccess = await queryOne(`
+      SELECT 
+        hm.membership_id,
+        hm.role,
+        hm.can_create_tasks
+      FROM household_members hm
+      WHERE hm.household_id = ? AND hm.user_id = ? AND hm.is_active = 1
+    `, [existingTask.household_id, req.user.userId]);
+
+    if (!hasAccess) {
+      return res.status(403).json({
+        success: false,
+        error: {
+          code: 'HOUSEHOLD_ACCESS_DENIED',
+          message: 'Nimate dostopa do tega doma'
+        }
+      });
+    }
+
+    // Check can_create_tasks permission
+    if (hasAccess.role !== 'owner' && hasAccess.role !== 'admin' && !hasAccess.can_create_tasks) {
+      return res.status(403).json({
+        success: false,
+        error: {
+          code: 'INSUFFICIENT_PERMISSIONS',
+          message: 'Nimate dovoljenj za urejanje opravil'
+        }
+      });
+    }
+
+    // Task existence and access already verified above
 
     // Verify category exists if provided
     if (category_id) {
@@ -506,29 +566,57 @@ router.put('/:id', requireHouseholdAccess, requirePermission('can_create_tasks')
 // DELETE /tasks/:id - Delete Task
 // =============================================================================
 
-router.delete('/:id', requireHouseholdAccess, requirePermission('can_create_tasks'), 
-  async (req, res) => {
+router.delete('/:id', async (req, res) => {
   try {
     const taskId = req.params.id;
 
-    // Check if task exists and user has access
-    const existingTask = await queryOne(`
+    // Check if task exists and get household_id
+    const taskInfo = await queryOne(`
       SELECT 
         t.task_id,
         t.title,
-        t.household_id,
-        hm.role as user_role
+        t.household_id
       FROM tasks t
-      JOIN household_members hm ON t.household_id = hm.household_id
-      WHERE t.task_id = ? AND hm.user_id = ? AND hm.is_active = 1 AND t.is_active = 1
-    `, [taskId, req.user.userId]);
+      WHERE t.task_id = ? AND t.is_active = 1
+    `, [taskId]);
 
-    if (!existingTask) {
+    if (!taskInfo) {
       return res.status(404).json({
         success: false,
         error: {
           code: 'TASK_NOT_FOUND',
           message: 'Naloga ni najdena'
+        }
+      });
+    }
+
+    // Verify access and permissions
+    const hasAccess = await queryOne(`
+      SELECT 
+        hm.membership_id,
+        hm.role,
+        hm.can_create_tasks
+      FROM household_members hm
+      WHERE hm.household_id = ? AND hm.user_id = ? AND hm.is_active = 1
+    `, [taskInfo.household_id, req.user.userId]);
+
+    if (!hasAccess) {
+      return res.status(403).json({
+        success: false,
+        error: {
+          code: 'HOUSEHOLD_ACCESS_DENIED',
+          message: 'Nimate dostopa do tega doma'
+        }
+      });
+    }
+
+    // Check can_create_tasks permission
+    if (hasAccess.role !== 'owner' && hasAccess.role !== 'admin' && !hasAccess.can_create_tasks) {
+      return res.status(403).json({
+        success: false,
+        error: {
+          code: 'INSUFFICIENT_PERMISSIONS',
+          message: 'Nimate dovoljenj za brisanje opravil'
         }
       });
     }
@@ -554,7 +642,7 @@ router.delete('/:id', requireHouseholdAccess, requirePermission('can_create_task
     res.json({
       success: true,
       data: {
-        message: `Naloga "${existingTask.title}" je bila uspešno izbrisana`
+        message: `Naloga "${taskInfo.title}" je bila uspešno izbrisana`
       }
     });
 

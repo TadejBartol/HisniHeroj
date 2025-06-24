@@ -211,9 +211,30 @@ router.post('/join', validate(householdSchemas.join), async (req, res) => {
 // GET /households/:id - Get Household Details
 // =============================================================================
 
-router.get('/:id', requireHouseholdAccess, async (req, res) => {
+router.get('/:id', async (req, res) => {
   try {
     const householdId = req.params.id;
+
+    // Verify access to household
+    const hasAccess = await queryOne(`
+      SELECT 
+        hm.membership_id,
+        hm.role,
+        h.name as household_name
+      FROM household_members hm
+      JOIN households h ON hm.household_id = h.household_id
+      WHERE hm.household_id = ? AND hm.user_id = ? AND hm.is_active = 1 AND h.is_active = 1
+    `, [householdId, req.user.userId]);
+
+    if (!hasAccess) {
+      return res.status(403).json({
+        success: false,
+        error: {
+          code: 'HOUSEHOLD_ACCESS_DENIED',
+          message: 'Nimate dostopa do tega doma'
+        }
+      });
+    }
 
     // Get household details
     const household = await queryOne(`
@@ -299,11 +320,40 @@ router.get('/:id', requireHouseholdAccess, async (req, res) => {
 // PUT /households/:id - Update Household
 // =============================================================================
 
-router.put('/:id', requireHouseholdAccess, requirePermission('manage_household'), 
-  validate(householdSchemas.update), async (req, res) => {
+router.put('/:id', validate(householdSchemas.update), async (req, res) => {
   try {
     const householdId = req.params.id;
     const { name, description } = req.body;
+
+    // Verify access and permissions
+    const hasAccess = await queryOne(`
+      SELECT 
+        hm.membership_id,
+        hm.role
+      FROM household_members hm
+      WHERE hm.household_id = ? AND hm.user_id = ? AND hm.is_active = 1
+    `, [householdId, req.user.userId]);
+
+    if (!hasAccess) {
+      return res.status(403).json({
+        success: false,
+        error: {
+          code: 'HOUSEHOLD_ACCESS_DENIED',
+          message: 'Nimate dostopa do tega doma'
+        }
+      });
+    }
+
+    // Check manage_household permission
+    if (hasAccess.role !== 'owner' && hasAccess.role !== 'admin') {
+      return res.status(403).json({
+        success: false,
+        error: {
+          code: 'INSUFFICIENT_PERMISSIONS',
+          message: 'Nimate dovoljenj za upravljanje doma'
+        }
+      });
+    }
 
     // Update household
     await query(`
@@ -352,10 +402,39 @@ router.put('/:id', requireHouseholdAccess, requirePermission('manage_household')
 // POST /households/:id/regenerate-invite - Regenerate Invite Code
 // =============================================================================
 
-router.post('/:id/regenerate-invite', requireHouseholdAccess, requirePermission('manage_household'), 
-  async (req, res) => {
+router.post('/:id/regenerate-invite', async (req, res) => {
   try {
     const householdId = req.params.id;
+
+    // Verify access and permissions
+    const hasAccess = await queryOne(`
+      SELECT 
+        hm.membership_id,
+        hm.role
+      FROM household_members hm
+      WHERE hm.household_id = ? AND hm.user_id = ? AND hm.is_active = 1
+    `, [householdId, req.user.userId]);
+
+    if (!hasAccess) {
+      return res.status(403).json({
+        success: false,
+        error: {
+          code: 'HOUSEHOLD_ACCESS_DENIED',
+          message: 'Nimate dostopa do tega doma'
+        }
+      });
+    }
+
+    // Check manage_household permission
+    if (hasAccess.role !== 'owner' && hasAccess.role !== 'admin') {
+      return res.status(403).json({
+        success: false,
+        error: {
+          code: 'INSUFFICIENT_PERMISSIONS',
+          message: 'Nimate dovoljenj za upravljanje doma'
+        }
+      });
+    }
 
     // Generate new unique invite code
     const generateInviteCode = () => {
@@ -407,12 +486,41 @@ router.post('/:id/regenerate-invite', requireHouseholdAccess, requirePermission(
 // PUT /households/:id/members/:userId/role - Update Member Role
 // =============================================================================
 
-router.put('/:id/members/:userId/role', requireHouseholdAccess, requirePermission('manage_members'), 
-  validate(householdSchemas.updateMemberRole), async (req, res) => {
+router.put('/:id/members/:userId/role', validate(householdSchemas.updateMemberRole), async (req, res) => {
   try {
     const householdId = req.params.id;
     const userId = req.params.userId;
     const { role } = req.body;
+
+    // Verify access and permissions
+    const hasAccess = await queryOne(`
+      SELECT 
+        hm.membership_id,
+        hm.role
+      FROM household_members hm
+      WHERE hm.household_id = ? AND hm.user_id = ? AND hm.is_active = 1
+    `, [householdId, req.user.userId]);
+
+    if (!hasAccess) {
+      return res.status(403).json({
+        success: false,
+        error: {
+          code: 'HOUSEHOLD_ACCESS_DENIED',
+          message: 'Nimate dostopa do tega doma'
+        }
+      });
+    }
+
+    // Check manage_members permission
+    if (hasAccess.role !== 'owner' && hasAccess.role !== 'admin') {
+      return res.status(403).json({
+        success: false,
+        error: {
+          code: 'INSUFFICIENT_PERMISSIONS',
+          message: 'Nimate dovoljenj za upravljanje članov'
+        }
+      });
+    }
 
     // Check if member exists
     const member = await queryOne(`
@@ -479,11 +587,40 @@ router.put('/:id/members/:userId/role', requireHouseholdAccess, requirePermissio
 // DELETE /households/:id/members/:userId - Remove Member
 // =============================================================================
 
-router.delete('/:id/members/:userId', requireHouseholdAccess, requirePermission('manage_members'), 
-  async (req, res) => {
+router.delete('/:id/members/:userId', async (req, res) => {
   try {
     const householdId = req.params.id;
     const userId = req.params.userId;
+
+    // Verify access and permissions
+    const hasAccess = await queryOne(`
+      SELECT 
+        hm.membership_id,
+        hm.role
+      FROM household_members hm
+      WHERE hm.household_id = ? AND hm.user_id = ? AND hm.is_active = 1
+    `, [householdId, req.user.userId]);
+
+    if (!hasAccess) {
+      return res.status(403).json({
+        success: false,
+        error: {
+          code: 'HOUSEHOLD_ACCESS_DENIED',
+          message: 'Nimate dostopa do tega doma'
+        }
+      });
+    }
+
+    // Check manage_members permission
+    if (hasAccess.role !== 'owner' && hasAccess.role !== 'admin') {
+      return res.status(403).json({
+        success: false,
+        error: {
+          code: 'INSUFFICIENT_PERMISSIONS',
+          message: 'Nimate dovoljenj za upravljanje članov'
+        }
+      });
+    }
 
     // Check if member exists
     const member = await queryOne(`
@@ -549,9 +686,28 @@ router.delete('/:id/members/:userId', requireHouseholdAccess, requirePermission(
 // POST /households/:id/leave - Leave Household
 // =============================================================================
 
-router.post('/:id/leave', requireHouseholdAccess, async (req, res) => {
+router.post('/:id/leave', async (req, res) => {
   try {
     const householdId = req.params.id;
+
+    // Verify access to household
+    const hasAccess = await queryOne(`
+      SELECT 
+        hm.membership_id,
+        hm.role
+      FROM household_members hm
+      WHERE hm.household_id = ? AND hm.user_id = ? AND hm.is_active = 1
+    `, [householdId, req.user.userId]);
+
+    if (!hasAccess) {
+      return res.status(403).json({
+        success: false,
+        error: {
+          code: 'HOUSEHOLD_ACCESS_DENIED',
+          message: 'Nimate dostopa do tega doma'
+        }
+      });
+    }
 
     // Check if user is household creator
     const household = await queryOne(`
@@ -601,10 +757,39 @@ router.post('/:id/leave', requireHouseholdAccess, async (req, res) => {
 // DELETE /households/:id - Delete Household
 // =============================================================================
 
-router.delete('/:id', requireHouseholdAccess, requirePermission('manage_household'), 
-  async (req, res) => {
+router.delete('/:id', async (req, res) => {
   try {
     const householdId = req.params.id;
+
+    // Verify access and permissions
+    const hasAccess = await queryOne(`
+      SELECT 
+        hm.membership_id,
+        hm.role
+      FROM household_members hm
+      WHERE hm.household_id = ? AND hm.user_id = ? AND hm.is_active = 1
+    `, [householdId, req.user.userId]);
+
+    if (!hasAccess) {
+      return res.status(403).json({
+        success: false,
+        error: {
+          code: 'HOUSEHOLD_ACCESS_DENIED',
+          message: 'Nimate dostopa do tega doma'
+        }
+      });
+    }
+
+    // Check manage_household permission (only owner can delete)
+    if (hasAccess.role !== 'owner') {
+      return res.status(403).json({
+        success: false,
+        error: {
+          code: 'INSUFFICIENT_PERMISSIONS',
+          message: 'Samo lastnik lahko izbriše dom'
+        }
+      });
+    }
 
     // Soft delete household and all related data
     await query(`

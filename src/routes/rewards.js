@@ -244,8 +244,7 @@ router.get('/:id', async (req, res) => {
 // POST /rewards - Create New Reward
 // =============================================================================
 
-router.post('/', requireHouseholdAccess, requirePermission('can_create_rewards'), 
-  validate(rewardSchemas.create), async (req, res) => {
+router.post('/', validate(rewardSchemas.create), async (req, res) => {
   try {
     const {
       household_id,
@@ -254,6 +253,37 @@ router.post('/', requireHouseholdAccess, requirePermission('can_create_rewards')
       points_cost,
       quantity = 1
     } = req.body;
+
+    // Verify access and permissions
+    const hasAccess = await queryOne(`
+      SELECT 
+        hm.membership_id,
+        hm.role,
+        hm.can_create_rewards
+      FROM household_members hm
+      WHERE hm.household_id = ? AND hm.user_id = ? AND hm.is_active = 1
+    `, [household_id, req.user.userId]);
+
+    if (!hasAccess) {
+      return res.status(403).json({
+        success: false,
+        error: {
+          code: 'HOUSEHOLD_ACCESS_DENIED',
+          message: 'Nimate dostopa do tega doma'
+        }
+      });
+    }
+
+    // Check can_create_rewards permission
+    if (hasAccess.role !== 'owner' && hasAccess.role !== 'admin' && !hasAccess.can_create_rewards) {
+      return res.status(403).json({
+        success: false,
+        error: {
+          code: 'INSUFFICIENT_PERMISSIONS',
+          message: 'Nimate dovoljenj za ustvarjanje nagrad'
+        }
+      });
+    }
 
     // Create reward
     const rewardResult = await query(`
@@ -306,8 +336,7 @@ router.post('/', requireHouseholdAccess, requirePermission('can_create_rewards')
 // PUT /rewards/:id - Update Reward
 // =============================================================================
 
-router.put('/:id', requireHouseholdAccess, requirePermission('can_create_rewards'), 
-  validate(rewardSchemas.update), async (req, res) => {
+router.put('/:id', validate(rewardSchemas.update), async (req, res) => {
   try {
     const rewardId = req.params.id;
     const {
@@ -317,23 +346,52 @@ router.put('/:id', requireHouseholdAccess, requirePermission('can_create_rewards
       quantity
     } = req.body;
 
-    // Check if reward exists and user has access
-    const existingReward = await queryOne(`
+    // Check if reward exists and get household_id
+    const rewardInfo = await queryOne(`
       SELECT 
         r.reward_id,
-        r.household_id,
-        hm.role as user_role
+        r.household_id
       FROM rewards r
-      JOIN household_members hm ON r.household_id = hm.household_id
-      WHERE r.reward_id = ? AND hm.user_id = ? AND hm.is_active = 1 AND r.is_active = 1
-    `, [rewardId, req.user.userId]);
+      WHERE r.reward_id = ? AND r.is_active = 1
+    `, [rewardId]);
 
-    if (!existingReward) {
+    if (!rewardInfo) {
       return res.status(404).json({
         success: false,
         error: {
           code: 'REWARD_NOT_FOUND',
           message: 'Nagrada ni najdena'
+        }
+      });
+    }
+
+    // Verify access and permissions
+    const hasAccess = await queryOne(`
+      SELECT 
+        hm.membership_id,
+        hm.role,
+        hm.can_create_rewards
+      FROM household_members hm
+      WHERE hm.household_id = ? AND hm.user_id = ? AND hm.is_active = 1
+    `, [rewardInfo.household_id, req.user.userId]);
+
+    if (!hasAccess) {
+      return res.status(403).json({
+        success: false,
+        error: {
+          code: 'HOUSEHOLD_ACCESS_DENIED',
+          message: 'Nimate dostopa do tega doma'
+        }
+      });
+    }
+
+    // Check can_create_rewards permission
+    if (hasAccess.role !== 'owner' && hasAccess.role !== 'admin' && !hasAccess.can_create_rewards) {
+      return res.status(403).json({
+        success: false,
+        error: {
+          code: 'INSUFFICIENT_PERMISSIONS',
+          message: 'Nimate dovoljenj za urejanje nagrad'
         }
       });
     }
@@ -392,29 +450,57 @@ router.put('/:id', requireHouseholdAccess, requirePermission('can_create_rewards
 // DELETE /rewards/:id - Delete Reward
 // =============================================================================
 
-router.delete('/:id', requireHouseholdAccess, requirePermission('can_create_rewards'), 
-  async (req, res) => {
+router.delete('/:id', async (req, res) => {
   try {
     const rewardId = req.params.id;
 
-    // Check if reward exists and user has access
-    const existingReward = await queryOne(`
+    // Check if reward exists and get household_id
+    const rewardInfo = await queryOne(`
       SELECT 
         r.reward_id,
         r.title,
-        r.household_id,
-        hm.role as user_role
+        r.household_id
       FROM rewards r
-      JOIN household_members hm ON r.household_id = hm.household_id
-      WHERE r.reward_id = ? AND hm.user_id = ? AND hm.is_active = 1 AND r.is_active = 1
-    `, [rewardId, req.user.userId]);
+      WHERE r.reward_id = ? AND r.is_active = 1
+    `, [rewardId]);
 
-    if (!existingReward) {
+    if (!rewardInfo) {
       return res.status(404).json({
         success: false,
         error: {
           code: 'REWARD_NOT_FOUND',
           message: 'Nagrada ni najdena'
+        }
+      });
+    }
+
+    // Verify access and permissions
+    const hasAccess = await queryOne(`
+      SELECT 
+        hm.membership_id,
+        hm.role,
+        hm.can_create_rewards
+      FROM household_members hm
+      WHERE hm.household_id = ? AND hm.user_id = ? AND hm.is_active = 1
+    `, [rewardInfo.household_id, req.user.userId]);
+
+    if (!hasAccess) {
+      return res.status(403).json({
+        success: false,
+        error: {
+          code: 'HOUSEHOLD_ACCESS_DENIED',
+          message: 'Nimate dostopa do tega doma'
+        }
+      });
+    }
+
+    // Check can_create_rewards permission
+    if (hasAccess.role !== 'owner' && hasAccess.role !== 'admin' && !hasAccess.can_create_rewards) {
+      return res.status(403).json({
+        success: false,
+        error: {
+          code: 'INSUFFICIENT_PERMISSIONS',
+          message: 'Nimate dovoljenj za brisanje nagrad'
         }
       });
     }
@@ -448,7 +534,7 @@ router.delete('/:id', requireHouseholdAccess, requirePermission('can_create_rewa
     res.json({
       success: true,
       data: {
-        message: `Nagrada "${existingReward.title}" je bila uspešno izbrisana`
+        message: `Nagrada "${rewardInfo.title}" je bila uspešno izbrisana`
       }
     });
 
@@ -706,13 +792,12 @@ router.get('/claims/my', async (req, res) => {
 // POST /rewards/claims/:id/fulfill - Fulfill Reward Claim
 // =============================================================================
 
-router.post('/claims/:id/fulfill', requireHouseholdAccess, requirePermission('can_create_rewards'), 
-  async (req, res) => {
+router.post('/claims/:id/fulfill', async (req, res) => {
   try {
     const claimId = req.params.id;
 
-    // Check if claim exists and user has access
-    const claim = await queryOne(`
+    // Check if claim exists and get household info
+    const claimInfo = await queryOne(`
       SELECT 
         rc.claim_id,
         rc.reward_id,
@@ -726,11 +811,10 @@ router.post('/claims/:id/fulfill', requireHouseholdAccess, requirePermission('ca
       FROM reward_claims rc
       JOIN rewards r ON rc.reward_id = r.reward_id
       JOIN users u ON rc.claimed_by_user_id = u.user_id
-      JOIN household_members hm ON r.household_id = hm.household_id
-      WHERE rc.claim_id = ? AND hm.user_id = ? AND hm.is_active = 1
-    `, [claimId, req.user.userId]);
+      WHERE rc.claim_id = ?
+    `, [claimId]);
 
-    if (!claim) {
+    if (!claimInfo) {
       return res.status(404).json({
         success: false,
         error: {
@@ -740,7 +824,38 @@ router.post('/claims/:id/fulfill', requireHouseholdAccess, requirePermission('ca
       });
     }
 
-    if (claim.is_fulfilled) {
+    // Verify access and permissions
+    const hasAccess = await queryOne(`
+      SELECT 
+        hm.membership_id,
+        hm.role,
+        hm.can_create_rewards
+      FROM household_members hm
+      WHERE hm.household_id = ? AND hm.user_id = ? AND hm.is_active = 1
+    `, [claimInfo.household_id, req.user.userId]);
+
+    if (!hasAccess) {
+      return res.status(403).json({
+        success: false,
+        error: {
+          code: 'HOUSEHOLD_ACCESS_DENIED',
+          message: 'Nimate dostopa do tega doma'
+        }
+      });
+    }
+
+    // Check can_create_rewards permission
+    if (hasAccess.role !== 'owner' && hasAccess.role !== 'admin' && !hasAccess.can_create_rewards) {
+      return res.status(403).json({
+        success: false,
+        error: {
+          code: 'INSUFFICIENT_PERMISSIONS',
+          message: 'Nimate dovoljenj za izvedbo nagrad'
+        }
+      });
+    }
+
+    if (claimInfo.is_fulfilled) {
       return res.status(400).json({
         success: false,
         error: {
@@ -763,7 +878,7 @@ router.post('/claims/:id/fulfill', requireHouseholdAccess, requirePermission('ca
     res.json({
       success: true,
       data: {
-        message: `Uveljavitev nagrade "${claim.reward_title}" za ${claim.claimed_by_first_name} ${claim.claimed_by_last_name} je bila označena kot izvedena`
+        message: `Uveljavitev nagrade "${claimInfo.reward_title}" za ${claimInfo.claimed_by_first_name} ${claimInfo.claimed_by_last_name} je bila označena kot izvedena`
       }
     });
 

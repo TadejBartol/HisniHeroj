@@ -289,8 +289,13 @@ router.get('/:id', async (req, res) => {
         COUNT(tc.completion_id) as tasks_completed
       FROM household_members hm
       JOIN users u ON hm.user_id = u.user_id
-      LEFT JOIN task_completions tc ON u.user_id = tc.completed_by_user_id 
-        AND tc.task_id IN (SELECT task_id FROM tasks WHERE household_id = ?)
+      LEFT JOIN task_completions tc ON u.user_id = tc.completed_by 
+        AND tc.assignment_id IN (
+          SELECT ta.assignment_id 
+          FROM task_assignments ta 
+          JOIN tasks t ON ta.task_id = t.task_id 
+          WHERE t.household_id = ?
+        )
       WHERE hm.household_id = ? AND hm.is_active = 1 AND u.is_active = 1
       GROUP BY hm.user_id, hm.role, hm.joined_at, u.first_name, u.last_name, u.profile_image, u.last_login
       ORDER BY hm.joined_at

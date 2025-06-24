@@ -870,9 +870,10 @@ router.post('/claims/:id/fulfill', async (req, res) => {
       UPDATE reward_claims 
       SET 
         status = 'fulfilled',
-        fulfilled_at = NOW()
+        fulfilled_at = NOW(),
+        fulfilled_by_user_id = ?
       WHERE claim_id = ?
-    `, [claimId]);
+    `, [req.user.userId, claimId]);
 
     res.json({
       success: true,

@@ -76,7 +76,7 @@ router.get('/personal', async (req, res) => {
         COALESCE(SUM(CASE WHEN tc.completed_at >= DATE_FORMAT(CURDATE(), '%Y-%m-01') 
                          THEN tc.points_earned ELSE 0 END), 0) as month_points
       FROM users u
-      LEFT JOIN task_assignments ta ON u.user_id = ta.assigned_to
+      LEFT JOIN task_assignments ta ON u.user_id = ta.assigned_to_user_id
       LEFT JOIN tasks task_for_assignment ON ta.task_id = task_for_assignment.task_id AND task_for_assignment.household_id = ?
       LEFT JOIN task_completions tc ON u.user_id = tc.completed_by
       LEFT JOIN tasks task_for_completion ON tc.task_id = task_for_completion.task_id AND task_for_completion.household_id = ?
@@ -92,7 +92,7 @@ router.get('/personal', async (req, res) => {
         ta.status,
         t.title,
         t.difficulty_minutes,
-        t.requires_proof,
+        t.requires_photo,
         cat.name as category_name,
         cat.icon as category_icon,
         cat.color as category_color,
@@ -100,7 +100,7 @@ router.get('/personal', async (req, res) => {
       FROM task_assignments ta
       JOIN tasks t ON ta.task_id = t.task_id
       JOIN task_categories cat ON t.category_id = cat.category_id
-      WHERE ta.assigned_to = ? 
+      WHERE ta.assigned_to_user_id = ? 
         AND t.household_id = ?
         AND ta.is_active = 1 
         AND ta.status IN ('pending', 'overdue')
@@ -161,7 +161,7 @@ router.get('/personal', async (req, res) => {
       FROM task_assignments ta
       JOIN tasks t ON ta.task_id = t.task_id
       JOIN task_categories cat ON t.category_id = cat.category_id
-      WHERE ta.assigned_to = ? 
+      WHERE ta.assigned_to_user_id = ? 
         AND t.household_id = ?
         AND ta.is_active = 1 
         AND ta.status = 'pending'
@@ -276,7 +276,7 @@ router.get('/household/:id', async (req, res) => {
       LEFT JOIN task_completions tc ON u.user_id = tc.completed_by AND tc.task_id IN (
         SELECT task_id FROM tasks WHERE household_id = ?
       )
-      LEFT JOIN task_assignments ta ON u.user_id = ta.assigned_to AND ta.task_id IN (
+      LEFT JOIN task_assignments ta ON u.user_id = ta.assigned_to_user_id AND ta.task_id IN (
         SELECT task_id FROM tasks WHERE household_id = ?
       )
       LEFT JOIN reward_claims rc ON u.user_id = rc.claimed_by AND rc.status = 'fulfilled' AND rc.reward_id IN (

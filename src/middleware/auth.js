@@ -113,7 +113,7 @@ async function authMiddleware(req, res, next) {
  */
 async function requireHouseholdAccess(req, res, next) {
   try {
-    const householdId = req.params.household_id || req.params.householdId;
+    const householdId = req.params.household_id || req.params.householdId || req.params.id || req.body.household_id || req.query.household_id;
     
     if (!householdId) {
       return res.status(400).json({
@@ -128,7 +128,7 @@ async function requireHouseholdAccess(req, res, next) {
     // Check if user is member of household
     const membership = await queryOne(`
       SELECT 
-        hm.member_id,
+        hm.membership_id,
         hm.role,
         hm.can_create_tasks,
         hm.can_assign_tasks,

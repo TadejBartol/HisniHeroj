@@ -112,7 +112,7 @@ async function generateDailyAssignments() {
       SELECT 
         t.task_id,
         CASE 
-          WHEN t.is_cyclic = 1 THEN (
+          WHEN t.auto_assign = 1 THEN (
             SELECT hm.user_id 
             FROM household_members hm 
             WHERE hm.household_id = t.household_id 
@@ -166,7 +166,7 @@ async function generateWeeklyAssignments() {
       SELECT 
         t.task_id,
         CASE 
-          WHEN t.is_cyclic = 1 THEN (
+          WHEN t.auto_assign = 1 THEN (
             SELECT hm.user_id 
             FROM household_members hm 
             WHERE hm.household_id = t.household_id 

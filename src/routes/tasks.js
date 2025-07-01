@@ -393,6 +393,27 @@ router.post('/', validate(taskSchemas.create), async (req, res) => {
       WHERE t.task_id = ?
     `, [taskId]);
 
+    // Handle cycle_users list if provided and auto_assign is true
+    const { cycle_users } = req.body;
+    if (auto_assign && Array.isArray(cycle_users) && cycle_users.length) {
+      // Ensure helper table exists
+      await query(`CREATE TABLE IF NOT EXISTS task_cycle_users (
+        task_id INT NOT NULL,
+        user_id INT NOT NULL,
+        position INT DEFAULT 0,
+        PRIMARY KEY (task_id, user_id),
+        FOREIGN KEY (task_id) REFERENCES tasks(task_id) ON DELETE CASCADE,
+        FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;`);
+
+      // Remove previous (should be none for new task) and insert
+      await query('DELETE FROM task_cycle_users WHERE task_id = ?', [taskId]);
+      for (let i = 0; i < cycle_users.length; i++) {
+        const uid = cycle_users[i];
+        await query('INSERT INTO task_cycle_users (task_id, user_id, position) VALUES (?,?,?)', [taskId, uid, i]);
+      }
+    }
+
     res.status(201).json({
       success: true,
       data: {
@@ -543,6 +564,26 @@ router.put('/:id', validate(taskSchemas.update), async (req, res) => {
       JOIN households h ON t.household_id = h.household_id
       WHERE t.task_id = ?
     `, [taskId]);
+
+    // If cycle_users provided, sync table
+    if (req.body.cycle_users) {
+      await query(`CREATE TABLE IF NOT EXISTS task_cycle_users (
+        task_id INT NOT NULL,
+        user_id INT NOT NULL,
+        position INT DEFAULT 0,
+        PRIMARY KEY (task_id, user_id),
+        FOREIGN KEY (task_id) REFERENCES tasks(task_id) ON DELETE CASCADE,
+        FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;`);
+
+      await query('DELETE FROM task_cycle_users WHERE task_id = ?', [taskId]);
+      if (Array.isArray(req.body.cycle_users) && req.body.cycle_users.length) {
+        for (let i = 0; i < req.body.cycle_users.length; i++) {
+          const uid = req.body.cycle_users[i];
+          await query('INSERT INTO task_cycle_users (task_id, user_id, position) VALUES (?,?,?)', [taskId, uid, i]);
+        }
+      }
+    }
 
     res.json({
       success: true,

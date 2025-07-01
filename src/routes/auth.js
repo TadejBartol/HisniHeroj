@@ -7,6 +7,7 @@ const bcrypt = require('bcryptjs');
 const { query, queryOne, beginTransaction, commitTransaction, rollbackTransaction } = require('../models/database');
 const { generateToken, generateRefreshToken, verifyToken } = require('../utils/jwt');
 const { validate, authSchemas } = require('../middleware/validation');
+const crypto = require('crypto');
 
 const router = express.Router();
 
@@ -358,6 +359,64 @@ router.get('/me', async (req, res) => {
         message: 'Napaka pri pridobivanju uporabnika'
       }
     });
+  }
+});
+
+// =============================================================================
+// POST /auth/forgot-password - request reset
+// =============================================================================
+
+router.post('/forgot-password', async (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email) return res.status(400).json({ success:false, error:{ code:'EMAIL_REQUIRED', message:'Email je obvezen' } });
+
+    const user = await queryOne('SELECT user_id FROM users WHERE email = ? AND is_active = 1', [email]);
+    if (!user) {
+      // Prevent enumeration – respond success
+      return res.json({ success:true, data:{ message:'Če email obstaja, boste prejeli navodila za ponastavitev.' } });
+    }
+
+    const token = crypto.randomBytes(32).toString('hex');
+    const expires = new Date(Date.now() + 60*60*1000); // 1h
+
+    await query('INSERT INTO password_reset_tokens (token, user_id, expires_at) VALUES (?,?,?)', [token, user.user_id, expires]);
+
+    // TODO: poslati email – za zdaj vrnemo token v odzivu
+    res.json({ success:true, data:{ reset_token: token, expires_at: expires } });
+
+  } catch (error) {
+    console.error('Forgot password error:', error);
+    res.status(500).json({ success:false, error:{ code:'FORGOT_PASSWORD_ERROR', message:'Napaka pri zahtevi za ponastavitev gesla' } });
+  }
+});
+
+// =============================================================================
+// POST /auth/reset-password - confirm reset
+// =============================================================================
+
+router.post('/reset-password', async (req, res) => {
+  try {
+    const { token, new_password } = req.body;
+    if (!token || !new_password) return res.status(400).json({ success:false, error:{ code:'MISSING_FIELDS', message:'Manjka token ali geslo' } });
+
+    const record = await queryOne('SELECT * FROM password_reset_tokens WHERE token=? AND used=0', [token]);
+    if (!record) return res.status(400).json({ success:false, error:{ code:'INVALID_TOKEN', message:'Token ni veljaven' } });
+
+    if (new Date(record.expires_at) < new Date()) {
+      return res.status(400).json({ success:false, error:{ code:'TOKEN_EXPIRED', message:'Token je potekel' } });
+    }
+
+    const bcrypt = require('bcrypt');
+    const hash = await bcrypt.hash(new_password, 12);
+    await query('UPDATE users SET password_hash=? WHERE user_id=?', [hash, record.user_id]);
+    await query('UPDATE password_reset_tokens SET used=1 WHERE token=?', [token]);
+
+    res.json({ success:true, data:{ message:'Geslo uspešno ponastavljeno' } });
+
+  } catch (error) {
+    console.error('Reset password error:', error);
+    res.status(500).json({ success:false, error:{ code:'RESET_PASSWORD_ERROR', message:'Napaka pri ponastavitvi gesla' } });
   }
 });
 

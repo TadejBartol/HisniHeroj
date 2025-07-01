@@ -322,6 +322,34 @@ router.get('/:id', async (req, res) => {
 });
 
 // =============================================================================
+// GET /households/:id/members - list members
+// =============================================================================
+
+router.get('/:id/members', async (req, res) => {
+  try {
+    const householdId = req.params.id;
+
+    // Check access
+    const member = await queryOne('SELECT membership_id FROM household_members WHERE household_id=? AND user_id=? AND is_active=1', [householdId, req.user.userId]);
+    if (!member) {
+      return res.status(403).json({ success:false, error:{ code:'HOUSEHOLD_ACCESS_DENIED', message:'Nimate dostopa do tega doma' } });
+    }
+
+    const members = await query(`
+      SELECT hm.user_id, u.first_name, u.last_name, hm.role, hm.can_create_tasks, hm.can_assign_tasks, hm.can_create_rewards, hm.joined_at, hm.is_active
+      FROM household_members hm
+      JOIN users u ON hm.user_id = u.user_id
+      WHERE hm.household_id = ?`, [householdId]);
+
+    res.json({ success:true, data:{ members } });
+
+  } catch (error) {
+    console.error('List household members error:', error);
+    res.status(500).json({ success:false, error:{ code:'LIST_MEMBERS_ERROR', message:'Napaka pri pridobivanju članov' } });
+  }
+});
+
+// =============================================================================
 // PUT /households/:id - Update Household
 // =============================================================================
 

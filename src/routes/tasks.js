@@ -15,35 +15,36 @@ const router = express.Router();
 
 router.get('/categories', async (req, res) => {
   try {
-    const categories = await query(`
-      SELECT 
+    const { household_id } = req.query;
+
+    let where = 'is_active = 1';
+    const params = [];
+
+    if (household_id) {
+      where += ' AND household_id = ?';
+      params.push(parseInt(household_id));
+    }
+
+    const categories = await query(
+      `SELECT 
         category_id,
+        household_id,
         name,
         description,
         icon,
         color,
         is_active
       FROM task_categories 
-      WHERE is_active = 1
-      ORDER BY name
-    `);
+      WHERE ${where}
+      ORDER BY name`,
+      params
+    );
 
-    res.json({
-      success: true,
-      data: {
-        categories
-      }
-    });
+    res.json({ success: true, data: { categories } });
 
   } catch (error) {
     console.error('Get task categories error:', error);
-    res.status(500).json({
-      success: false,
-      error: {
-        code: 'GET_CATEGORIES_ERROR',
-        message: 'Napaka pri pridobivanju kategorij'
-      }
-    });
+    res.status(500).json({ success: false, error: { code: 'GET_CATEGORIES_ERROR', message: 'Napaka pri pridobivanju kategorij' } });
   }
 });
 

@@ -894,4 +894,129 @@ router.post('/claims/:id/fulfill', async (req, res) => {
   }
 });
 
+// =============================================================================
+// GET /rewards/claims - List all reward claims (admin/owner)
+// =============================================================================
+
+router.get('/claims', async (req, res) => {
+  try {
+    const { household_id, status='all', limit='50', offset='0' } = req.query;
+
+    // Must be owner/admin of given household, otherwise deny
+    if (!household_id) {
+      return res.status(400).json({ success:false, error:{ code:'HOUSEHOLD_REQUIRED', message:'Manjka household_id' } });
+    }
+
+    const member = await queryOne(`SELECT role FROM household_members WHERE household_id=? AND user_id=? AND is_active=1`, [household_id, req.user.userId]);
+    if (!member || (member.role !== 'owner' && member.role !== 'admin')) {
+      return res.status(403).json({ success:false, error:{ code:'PERMISSION_DENIED', message:'Nimate dovoljenja' } });
+    }
+
+    const whereParts = ['r.household_id = ?'];
+    const params = [household_id];
+    if (status !== 'all') { whereParts.push('rc.status = ?'); params.push(status); }
+
+    const claims = await query(`
+      SELECT rc.*, r.title as reward_title, u.first_name, u.last_name
+      FROM reward_claims rc
+      JOIN rewards r ON rc.reward_id = r.reward_id
+      JOIN users u ON rc.claimed_by = u.user_id
+      WHERE ${whereParts.join(' AND ')}
+      ORDER BY rc.claimed_at DESC
+      LIMIT ? OFFSET ?`, [...params, parseInt(limit), parseInt(offset)]);
+
+    res.json({ success:true, data:{ claims } });
+
+  } catch (error) {
+    console.error('List reward claims error:', error);
+    res.status(500).json({ success:false, error:{ code:'LIST_CLAIMS_ERROR', message:'Napaka pri pridobivanju zahtevkov' } });
+  }
+});
+
+// =============================================================================
+// GET /rewards/claims/:id - Claim detail (requires access)
+// =============================================================================
+
+router.get('/claims/:id', async (req, res) => {
+  try {
+    const claimId = req.params.id;
+    const claim = await queryOne(`
+      SELECT rc.*, r.title as reward_title, r.household_id, u.first_name, u.last_name
+      FROM reward_claims rc
+      JOIN rewards r ON rc.reward_id = r.reward_id
+      JOIN users u ON rc.claimed_by = u.user_id
+      WHERE rc.claim_id = ?`, [claimId]);
+
+    if (!claim) return res.status(404).json({ success:false, error:{ code:'CLAIM_NOT_FOUND', message:'Zahtevek ni najden' } });
+
+    // Access check
+    const member = await queryOne(`SELECT role FROM household_members WHERE household_id=? AND user_id=? AND is_active=1`, [claim.household_id, req.user.userId]);
+    if (!member) return res.status(403).json({ success:false, error:{ code:'PERMISSION_DENIED', message:'Dostop zavrnjen' } });
+
+    res.json({ success:true, data:{ claim } });
+
+  } catch (error) {
+    console.error('Get claim detail error:', error);
+    res.status(500).json({ success:false, error:{ code:'GET_CLAIM_ERROR', message:'Napaka pri podrobnostih zahtevka' } });
+  }
+});
+
+// =============================================================================
+// POST /rewards/claims/:id/reject - Reject claim
+// =============================================================================
+
+router.post('/claims/:id/reject', async (req, res) => {
+  try {
+    const claimId = req.params.id;
+    const { admin_notes='' } = req.body;
+
+    const claim = await queryOne(`SELECT rc.*, r.household_id, r.title as reward_title FROM reward_claims rc JOIN rewards r ON rc.reward_id = r.reward_id WHERE rc.claim_id = ?`, [claimId]);
+    if (!claim) return res.status(404).json({ success:false, error:{ code:'CLAIM_NOT_FOUND', message:'Zahtevek ni najden' } });
+
+    const member = await queryOne(`SELECT role FROM household_members WHERE household_id=? AND user_id=? AND is_active=1`, [claim.household_id, req.user.userId]);
+    if (!member || (member.role !== 'owner' && member.role !== 'admin')) {
+      return res.status(403).json({ success:false, error:{ code:'PERMISSION_DENIED', message:'Nimate dovoljenja' } });
+    }
+
+    if (claim.status !== 'pending') {
+      return res.status(400).json({ success:false, error:{ code:'INVALID_STATUS', message:'Zahtevek ni več v stanju pending' } });
+    }
+
+    await query(`UPDATE reward_claims SET status='cancelled', admin_notes=? , fulfilled_by_user_id=? , fulfilled_at=NOW() WHERE claim_id=?`, [admin_notes, req.user.userId, claimId]);
+
+    res.json({ success:true, data:{ message:`Zahtevek za nagrado "${claim.reward_title}" zavrnjen.` } });
+
+  } catch (error) {
+    console.error('Reject claim error:', error);
+    res.status(500).json({ success:false, error:{ code:'REJECT_CLAIM_ERROR', message:'Napaka pri zavrnitvi zahtevka' } });
+  }
+});
+
+// =============================================================================
+// DELETE /rewards/claims/:id - Cancel own pending claim
+// =============================================================================
+
+router.delete('/claims/:id', async (req,res)=>{
+  try {
+    const claimId = req.params.id;
+    const claim = await queryOne('SELECT * FROM reward_claims WHERE claim_id=?', [claimId]);
+    if (!claim) return res.status(404).json({ success:false, error:{ code:'CLAIM_NOT_FOUND', message:'Zahtevek ni najden' } });
+
+    if (claim.claimed_by !== req.user.userId) {
+      return res.status(403).json({ success:false, error:{ code:'PERMISSION_DENIED', message:'Lahko prekličete le svoje zahteve' } });
+    }
+
+    if (claim.status !== 'pending') {
+      return res.status(400).json({ success:false, error:{ code:'INVALID_STATUS', message:'Zahtevek ni več v stanju pending' } });
+    }
+
+    await query('DELETE FROM reward_claims WHERE claim_id = ?', [claimId]);
+    res.json({ success:true, data:{ message:'Zahtevek preklican' } });
+
+  } catch (error) {
+    console.error('Delete claim error:', error);
+    res.status(500).json({ success:false, error:{ code:'DELETE_CLAIM_ERROR', message:'Napaka pri preklicu zahtevka' } });
+  }
+});
+
 module.exports = router;

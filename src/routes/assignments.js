@@ -482,6 +482,66 @@ router.post('/bulk', requireHouseholdAccess, requirePermission('can_assign_tasks
 });
 
 // =============================================================================
+// PUT /assignments/:id - Full update / reassign
+// =============================================================================
+
+router.put('/:id', async (req, res) => {
+  try {
+    const assignmentId = req.params.id;
+    const { due_date, assigned_to_user_id, status, notes } = req.body;
+
+    // Fetch assignment and verify access (assigner or household admin)
+    const assignment = await queryOne(`
+      SELECT ta.*, t.household_id
+      FROM task_assignments ta
+      JOIN tasks t ON ta.task_id = t.task_id
+      WHERE ta.assignment_id = ? AND ta.is_active = 1
+    `, [assignmentId]);
+
+    if (!assignment) {
+      return res.status(404).json({ success:false, error:{ code:'ASSIGNMENT_NOT_FOUND', message:'Dodelitev ni najdena' } });
+    }
+
+    // Permission: assigner or admin/owner in household
+    let permitted = assignment.assigned_by_user_id === req.user.userId;
+    if (!permitted) {
+      const member = await queryOne(`SELECT role FROM household_members WHERE household_id=? AND user_id=? AND is_active=1`, [assignment.household_id, req.user.userId]);
+      permitted = member && (member.role === 'owner' || member.role === 'admin');
+    }
+
+    if (!permitted) {
+      return res.status(403).json({ success:false, error:{ code:'PERMISSION_DENIED', message:'Nimate dovoljenja za urejanje te dodelitve' } });
+    }
+
+    // Build update parts dynamically
+    const updates = [];
+    const params = [];
+    if (due_date) { updates.push('due_date = ?'); params.push(due_date); }
+    if (assigned_to_user_id) { updates.push('assigned_to_user_id = ?'); params.push(assigned_to_user_id); }
+    if (status) { updates.push('status = ?'); params.push(status); }
+    if (notes) { updates.push('notes = ?'); params.push(notes); }
+
+    if (updates.length === 0) {
+      return res.status(400).json({ success:false, error:{ code:'NO_FIELDS', message:'Ni podatkov za posodobitev' } });
+    }
+
+    updates.push('updated_at = NOW()');
+    const updateSql = `UPDATE task_assignments SET ${updates.join(', ')} WHERE assignment_id = ?`;
+    params.push(assignmentId);
+
+    await query(updateSql, params);
+
+    const updated = await queryOne(`SELECT * FROM task_assignments WHERE assignment_id = ?`, [assignmentId]);
+
+    res.json({ success:true, data:{ assignment: updated, message:'Dodelitev posodobljena' } });
+
+  } catch (error) {
+    console.error('Update assignment error:', error);
+    res.status(500).json({ success:false, error:{ code:'UPDATE_ASSIGNMENT_ERROR', message:'Napaka pri posodabljanju dodelitve' } });
+  }
+});
+
+// =============================================================================
 // PUT /assignments/:id/status - Update Assignment Status
 // =============================================================================
 

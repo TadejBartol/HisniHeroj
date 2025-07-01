@@ -521,6 +521,12 @@ router.put('/:id', validate(taskSchemas.update), async (req, res) => {
       }
     }
 
+    // Normalize undefined to null so mysql2 binding accepts parameters
+    const normalizedParams = [title, description, category_id, difficulty_minutes, frequency, requires_photo, auto_assign]
+      .map(v => v === undefined ? null : v);
+
+    const [nTitle, nDesc, nCat, nDiff, nFreq, nReqPhoto, nAuto] = normalizedParams;
+
     // Update task
     await query(`
       UPDATE tasks 
@@ -534,10 +540,7 @@ router.put('/:id', validate(taskSchemas.update), async (req, res) => {
         auto_assign = ?,
         updated_at = NOW()
       WHERE task_id = ?
-    `, [
-      title, description, category_id, difficulty_minutes, 
-      frequency, requires_photo, auto_assign, taskId
-    ]);
+    `, [nTitle, nDesc, nCat, nDiff, nFreq, nReqPhoto, nAuto, taskId]);
 
     // Fetch updated task
     const task = await queryOne(`

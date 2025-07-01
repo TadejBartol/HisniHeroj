@@ -527,6 +527,16 @@ router.put('/:id', validate(taskSchemas.update), async (req, res) => {
 
     const [nTitle, nDesc, nCat, nDiff, nFreq, nReqPhoto, nAuto] = normalizedParams;
 
+    // Fallback to existing values if param is null
+    const existing = existingTask; // we fetched earlier
+    const finalTitle = nTitle ?? existing.title;
+    const finalDesc = nDesc ?? existing.description;
+    const finalCat = nCat ?? existing.category_id;
+    const finalDiff = nDiff ?? existing.difficulty_minutes;
+    const finalFreq = nFreq ?? existing.frequency;
+    const finalReq = nReqPhoto ?? existing.requires_photo;
+    const finalAuto = nAuto ?? existing.auto_assign;
+
     // Update task
     await query(`
       UPDATE tasks 
@@ -540,7 +550,7 @@ router.put('/:id', validate(taskSchemas.update), async (req, res) => {
         auto_assign = ?,
         updated_at = NOW()
       WHERE task_id = ?
-    `, [nTitle, nDesc, nCat, nDiff, nFreq, nReqPhoto, nAuto, taskId]);
+    `, [finalTitle, finalDesc, finalCat, finalDiff, finalFreq, finalReq, finalAuto, taskId]);
 
     // Fetch updated task
     const task = await queryOne(`

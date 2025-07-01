@@ -122,6 +122,10 @@ const householdSchemas = {
 // Task schemas
 const taskSchemas = {
   create: Joi.object({
+    household_id: Joi.number().integer().positive().required().messages({
+      'number.positive': 'ID gospodinjstva mora biti pozitivno število',
+      'any.required': 'ID gospodinjstva je obvezen'
+    }),
     title: Joi.string().min(2).max(200).required().messages({
       'string.min': 'Naslov mora imeti vsaj 2 znaka',
       'string.max': 'Naslov je predolg',
@@ -152,10 +156,11 @@ const taskSchemas = {
     }),
     requires_proof: Joi.boolean().default(false),
     auto_assign: Joi.boolean().default(false),
-    cycle_users: Joi.array().items(Joi.number().integer().positive()).when('auto_assign',{ is: true, then: Joi.required(), otherwise: Joi.optional() })
+    cycle_users: Joi.array().items(Joi.number().integer().positive())
   }),
 
   update: Joi.object({
+    household_id: Joi.number().integer().positive(),
     title: Joi.string().min(2).max(200).messages({
       'string.min': 'Naslov mora imeti vsaj 2 znaka',
       'string.max': 'Naslov je predolg'

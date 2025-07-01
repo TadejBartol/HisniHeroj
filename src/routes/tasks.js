@@ -357,7 +357,7 @@ router.post('/', validate(taskSchemas.create), async (req, res) => {
       INSERT INTO tasks (
         household_id, title, description, category_id, 
         difficulty_minutes, frequency, requires_photo, auto_assign, 
-        created_by, created_at
+        created_by_user_id, created_at
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
     `, [
       household_id, title, description, category_id,
@@ -753,6 +753,96 @@ router.get('/:id/stats', async (req, res) => {
         message: 'Napaka pri pridobivanju statistik naloge'
       }
     });
+  }
+});
+
+// =============================================================================
+// POST /tasks/categories - Create Category
+// =============================================================================
+
+router.post('/categories', async (req, res) => {
+  try {
+    const { household_id, name, description = '', color = '#3498db', icon = 'home' } = req.body;
+
+    if (!household_id || !name) {
+      return res.status(400).json({ success:false, error:{ code:'INVALID_INPUT', message:'household_id in name sta obvezna' }});
+    }
+
+    // Verify membership + permissions
+    const member = await queryOne(`
+      SELECT hm.role, hm.can_create_tasks
+      FROM household_members hm
+      WHERE hm.household_id = ? AND hm.user_id = ? AND hm.is_active = 1
+    `,[household_id, req.user.userId]);
+
+    if (!member) {
+      return res.status(403).json({ success:false, error:{ code:'HOUSEHOLD_ACCESS_DENIED', message:'Nimate dostopa do tega doma' }});
+    }
+
+    if (member.role !== 'owner' && member.role !== 'admin' && !member.can_create_tasks) {
+      return res.status(403).json({ success:false, error:{ code:'INSUFFICIENT_PERMISSIONS', message:'Nimate dovoljenj za ustvarjanje kategorij' }});
+    }
+
+    // Insert category
+    const result = await query(`
+      INSERT INTO task_categories (household_id, name, description, color, icon, created_at)
+      VALUES (?, ?, ?, ?, ?, NOW())
+    `,[household_id, name, description, color, icon]);
+
+    const category = await queryOne('SELECT * FROM task_categories WHERE category_id = ?', [result.insertId]);
+
+    res.status(201).json({ success:true, data:{ category, message:'Kategorija uspešno ustvarjena' }});
+
+  } catch (error) {
+    console.error('Create category error:', error);
+    res.status(500).json({ success:false, error:{ code:'CREATE_CATEGORY_ERROR', message:'Napaka pri ustvarjanju kategorije' }});
+  }
+});
+
+// =============================================================================
+// PUT /tasks/categories/:id - Update Category
+// =============================================================================
+
+router.put('/categories/:id', async (req,res)=>{
+  try {
+    const categoryId = req.params.id;
+    const { name, description, color, icon, is_active } = req.body;
+
+    // Fetch category & household
+    const category = await queryOne('SELECT * FROM task_categories WHERE category_id = ?', [categoryId]);
+    if (!category) {
+      return res.status(404).json({ success:false, error:{ code:'CATEGORY_NOT_FOUND', message:'Kategorija ni najdena' }});
+    }
+
+    // Verify permissions
+    const member = await queryOne(`
+      SELECT hm.role, hm.can_create_tasks
+      FROM household_members hm
+      WHERE hm.household_id = ? AND hm.user_id = ? AND hm.is_active = 1
+    `,[category.household_id, req.user.userId]);
+
+    if (!member) return res.status(403).json({ success:false, error:{ code:'HOUSEHOLD_ACCESS_DENIED', message:'Nimate dostopa do tega doma' }});
+    if (member.role !== 'owner' && member.role !== 'admin' && !member.can_create_tasks) {
+      return res.status(403).json({ success:false, error:{ code:'INSUFFICIENT_PERMISSIONS', message:'Nimate dovoljenj za urejanje kategorij' }});
+    }
+
+    await query(`
+      UPDATE task_categories SET 
+        name = COALESCE(?, name),
+        description = COALESCE(?, description),
+        color = COALESCE(?, color),
+        icon = COALESCE(?, icon),
+        is_active = COALESCE(?, is_active),
+        updated_at = NOW()
+      WHERE category_id = ?
+    `,[name, description, color, icon, is_active, categoryId]);
+
+    const updated = await queryOne('SELECT * FROM task_categories WHERE category_id = ?', [categoryId]);
+    res.json({ success:true, data:{ category: updated, message:'Kategorija posodobljena' }});
+
+  } catch (error) {
+    console.error('Update category error:', error);
+    res.status(500).json({ success:false, error:{ code:'UPDATE_CATEGORY_ERROR', message:'Napaka pri posodabljanju kategorije' }});
   }
 });
 

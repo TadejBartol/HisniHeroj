@@ -240,6 +240,7 @@ const assignmentSchemas = {
       'date.min': 'Datum izvršitve ne more biti v preteklosti',
       'any.required': 'Datum izvršitve je obvezen'
     }),
+    household_id: Joi.number().integer().positive(),
     notes: Joi.string().max(500).allow('').messages({
       'string.max': 'Opombe so predolge'
     })

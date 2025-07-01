@@ -525,32 +525,23 @@ router.put('/:id', validate(taskSchemas.update), async (req, res) => {
     const normalizedParams = [title, description, category_id, difficulty_minutes, frequency, requires_photo, auto_assign]
       .map(v => v === undefined ? null : v);
 
-    const [nTitle, nDesc, nCat, nDiff, nFreq, nReqPhoto, nAuto] = normalizedParams;
+    const [nTitle, nDesc, nCat, nDiff, nFreq, nReq, nAuto] = normalizedParams;
 
-    // Fallback to existing values if param is null
-    const existing = existingTask; // we fetched earlier
-    const finalTitle = nTitle ?? existing.title;
-    const finalDesc = nDesc ?? existing.description;
-    const finalCat = nCat ?? existing.category_id;
-    const finalDiff = nDiff ?? existing.difficulty_minutes;
-    const finalFreq = nFreq ?? existing.frequency;
-    const finalReq = nReqPhoto ?? existing.requires_photo;
-    const finalAuto = nAuto ?? existing.auto_assign;
+    const fields = [];
+    const params = [];
+    if(nTitle!==null) { fields.push('title = ?'); params.push(nTitle); }
+    if(nDesc!==null) { fields.push('description = ?'); params.push(nDesc); }
+    if(nCat!==null) { fields.push('category_id = ?'); params.push(nCat); }
+    if(nDiff!==null) { fields.push('difficulty_minutes = ?'); params.push(nDiff); }
+    if(nFreq!==null) { fields.push('frequency = ?'); params.push(nFreq); }
+    if(nReq!==null) { fields.push('requires_photo = ?'); params.push(nReq); }
+    if(nAuto!==null) { fields.push('auto_assign = ?'); params.push(nAuto); }
 
-    // Update task
-    await query(`
-      UPDATE tasks 
-      SET 
-        title = ?, 
-        description = ?, 
-        category_id = ?, 
-        difficulty_minutes = ?, 
-        frequency = ?, 
-        requires_photo = ?, 
-        auto_assign = ?,
-        updated_at = NOW()
-      WHERE task_id = ?
-    `, [finalTitle, finalDesc, finalCat, finalDiff, finalFreq, finalReq, finalAuto, taskId]);
+    if(fields.length){
+      const sql=`UPDATE tasks SET ${fields.join(', ')}, updated_at = NOW() WHERE task_id = ?`;
+      params.push(taskId);
+      await query(sql, params);
+    }
 
     // Fetch updated task
     const task = await queryOne(`

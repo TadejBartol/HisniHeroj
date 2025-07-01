@@ -150,7 +150,9 @@ const taskSchemas = {
     }).messages({
       'any.required': 'Za letno frekvenco je potreben specifičen datum'
     }),
-    requires_proof: Joi.boolean().default(false)
+    requires_proof: Joi.boolean().default(false),
+    auto_assign: Joi.boolean().default(false),
+    cycle_users: Joi.array().items(Joi.number().integer().positive()).when('auto_assign',{ is: true, then: Joi.required(), otherwise: Joi.optional() })
   }),
 
   update: Joi.object({
@@ -163,7 +165,9 @@ const taskSchemas = {
     difficulty_minutes: Joi.number().integer().min(5).max(240),
     frequency: Joi.string().valid('once', 'daily', 'weekly', 'monthly', 'yearly'),
     specific_date: Joi.date().allow(null),
-    requires_proof: Joi.boolean()
+    requires_proof: Joi.boolean(),
+    auto_assign: Joi.boolean(),
+    cycle_users: Joi.array().items(Joi.number().integer().positive())
   }),
 
   assign: Joi.object({
